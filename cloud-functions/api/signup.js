@@ -18,17 +18,22 @@ export async function onRequestPost(context) {
   if (password.length < 8) return json({ error: "Password must be at least 8 characters" }, 400);
 
   const store = getStore(env);
-  const existing = await store.get(`user:${email}`);
-  if (existing) return json({ error: "An account with that email already exists" }, 409);
+  try {
+    const existing = await store.get(`user:${email}`);
+    if (existing) return json({ error: "An account with that email already exists" }, 409);
 
-  const { salt, hash } = hashPassword(password);
-  await store.put(
-    `user:${email}`,
-    JSON.stringify({ email, salt, hash, createdAt: new Date().toISOString() })
-  );
+    const { salt, hash } = hashPassword(password);
+    await store.put(
+      `user:${email}`,
+      JSON.stringify({ email, salt, hash, createdAt: new Date().toISOString() })
+    );
 
-  const token = newSessionToken();
-  await store.put(`session:${token}`, email);
+    const token = newSessionToken();
+    await store.put(`session:${token}`, email);
 
-  return json({ email }, 200, { "Set-Cookie": sessionCookie(token) });
+    return json({ email }, 200, { "Set-Cookie": sessionCookie(token) });
+  } catch (err) {
+    console.error("signup error:", err);
+    return json({ error: err.message || "Storage error" }, 500);
+  }
 }

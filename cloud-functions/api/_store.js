@@ -1,50 +1,71 @@
 // Storage: Supabase (instant, no approval) or EdgeOne KV (logbook_kv binding).
 
-function sbHeaders(env) {
+function cfg(env = {}) {
+  const e = env || {};
   return {
-    apikey: env.SUPABASE_SERVICE_KEY,
-    Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+    SUPABASE_URL: e.SUPABASE_URL || process.env.SUPABASE_URL || "",
+    SUPABASE_SERVICE_KEY:
+      e.SUPABASE_SERVICE_KEY ||
+      process.env.SUPABASE_SERVICE_KEY ||
+      e.SUPABASE_SECRET_KEY ||
+      process.env.SUPABASE_SECRET_KEY ||
+      "",
+    logbook_kv: e.logbook_kv,
+  };
+}
+
+function sbHeaders(c) {
+  return {
+    apikey: c.SUPABASE_SERVICE_KEY,
+    Authorization: `Bearer ${c.SUPABASE_SERVICE_KEY}`,
     "Content-Type": "application/json",
   };
 }
 
-function useSupabase(env) {
-  return Boolean(env.SUPABASE_URL && env.SUPABASE_SERVICE_KEY);
+function useSupabase(c) {
+  return Boolean(c.SUPABASE_URL && c.SUPABASE_SERVICE_KEY);
 }
 
-async function sbGet(env, key) {
-  const url = `${env.SUPABASE_URL}/rest/v1/kv_store?key=eq.${encodeURIComponent(key)}&select=value`;
-  const res = await fetch(url, { headers: sbHeaders(env) });
-  if (!res.ok) return null;
+async function sbGet(c, key) {
+  const url = `${c.SUPABASE_URL}/rest/v1/kv_store?key=eq.${encodeURIComponent(key)}&select=value`;
+  const res = await fetch(url, { headers: sbHeaders(c) });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Supabase get failed (${res.status}): ${body.slice(0, 120)}`);
+  }
   const rows = await res.json();
   return rows[0]?.value ?? null;
 }
 
-async function sbPut(env, key, value) {
-  const res = await fetch(`${env.SUPABASE_URL}/rest/v1/kv_store`, {
+async function sbPut(c, key, value) {
+  const res = await fetch(`${c.SUPABASE_URL}/rest/v1/kv_store`, {
     method: "POST",
-    headers: { ...sbHeaders(env), Prefer: "resolution=merge-duplicates" },
+    headers: { ...sbHeaders(c), Prefer: "resolution=merge-duplicates" },
     body: JSON.stringify({ key, value }),
   });
-  if (!res.ok) throw new Error(`Supabase put failed: ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Supabase put failed (${res.status}): ${body.slice(0, 120)}`);
+  }
 }
 
-async function sbDelete(env, key) {
-  const url = `${env.SUPABASE_URL}/rest/v1/kv_store?key=eq.${encodeURIComponent(key)}`;
-  const res = await fetch(url, { method: "DELETE", headers: sbHeaders(env) });
-  if (!res.ok && res.status !== 404) throw new Error(`Supabase delete failed: ${res.status}`);
+async function sbDelete(c, key) {
+  const url = `${c.SUPABASE_URL}/rest/v1/kv_store?key=eq.${encodeURIComponent(key)}`;
+  const res = await fetch(url, { method: "DELETE", headers: sbHeaders(c) });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`Supabase delete failed: ${res.status}`);
+  }
 }
 
 export function getStore(env) {
-  if (useSupabase(env)) {
+  const c = cfg(env);
+  if (useSupabase(c)) {
     return {
-      get: (key) => sbGet(env, key),
-      put: (key, value) => sbPut(env, key, value),
-      delete: (key) => sbDelete(env, key),
+      get: (key) => sbGet(c, key),
+      put: (key, value) => sbPut(c, key, value),
+      delete: (key) => sbDelete(c, key),
     };
   }
-  if (!env.logbook_kv) {
-    throw new Error("No storage configured. Set SUPABASE_URL + SUPABASE_SERVICE_KEY or bind logbook_kv.");
-  }
-  return env.logbook_kv;
+  if (c.logbook_kv) return c.logbook_kv;
+  throw new Error("No storage: set SUPABASE_URL + SUPABASE_SERVICE_KEY in EdgeOne env vars");
 }
