@@ -57,6 +57,8 @@ const logbook_kv = {
 const env = {
   logbook_kv,
   MAKERS_MODELS_KEY: process.env.MAKERS_MODELS_KEY || "",
+  SUPABASE_URL: process.env.SUPABASE_URL || "",
+  SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY || "",
 };
 
 function readBody(req) {
@@ -128,6 +130,11 @@ createServer(async (req, res) => {
   }
 }).listen(PORT, () => {
   console.log(`Logbook running at http://localhost:${PORT}`);
+  if (env.SUPABASE_URL && env.SUPABASE_SERVICE_KEY) {
+    console.log("Storage: Supabase");
+  } else {
+    console.log("Storage: local .dev-kv.json (add SUPABASE_URL + SUPABASE_SERVICE_KEY for Supabase)");
+  }
   if (env.MAKERS_MODELS_KEY) {
     console.log("AI extraction enabled (MAKERS_MODELS_KEY set).");
   } else {

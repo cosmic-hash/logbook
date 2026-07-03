@@ -1,12 +1,8 @@
-// Shared helpers for auth + KV storage.
-// Not a route itself (underscore-prefixed files aren't exposed as endpoints).
-// Uses one KV namespace, bound in the Makers console as `logbook_kv`, with
-// key prefixes to keep users/sessions/tasks separated:
-//   user:<email>     -> { email, salt, hash, createdAt }
-//   session:<token>  -> email
-//   tasks:<email>    -> [ ...tasks ]
+// Shared helpers for auth + storage (Supabase or EdgeOne KV).
+// Key prefixes: user:<email>, session:<token>, tasks:<email>
 
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { getStore } from "./_store.js";
 
 export function hashPassword(password) {
   const salt = randomBytes(16).toString("hex");
@@ -51,17 +47,18 @@ export async function getSessionEmail(request, env) {
   const cookies = parseCookies(request);
   const token = cookies["session"];
   if (!token) return null;
-  const email = await env.logbook_kv.get(`session:${token}`);
+  const store = getStore(env);
+  const email = await store.get(`session:${token}`);
   return email || null;
 }
 
 export async function getTasks(env, email) {
-  const raw = await env.logbook_kv.get(`tasks:${email}`);
+  const raw = await getStore(env).get(`tasks:${email}`);
   return raw ? JSON.parse(raw) : [];
 }
 
 export async function saveTasks(env, email, tasks) {
-  await env.logbook_kv.put(`tasks:${email}`, JSON.stringify(tasks));
+  await getStore(env).put(`tasks:${email}`, JSON.stringify(tasks));
 }
 
 export function json(data, status = 200, extraHeaders = {}) {

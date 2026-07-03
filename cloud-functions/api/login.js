@@ -1,5 +1,6 @@
 // POST /api/login  { email, password } -> sets session cookie, returns { email }
 import { verifyPassword, newSessionToken, sessionCookie, json } from "./_lib.js";
+import { getStore } from "./_store.js";
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -13,7 +14,8 @@ export async function onRequestPost(context) {
   const email = (body.email || "").trim().toLowerCase();
   const password = body.password || "";
 
-  const raw = await env.logbook_kv.get(`user:${email}`);
+  const store = getStore(env);
+  const raw = await store.get(`user:${email}`);
   if (!raw) return json({ error: "No account with that email" }, 401);
 
   const user = JSON.parse(raw);
@@ -22,7 +24,7 @@ export async function onRequestPost(context) {
   }
 
   const token = newSessionToken();
-  await env.logbook_kv.put(`session:${token}`, email);
+  await store.put(`session:${token}`, email);
 
   return json({ email }, 200, { "Set-Cookie": sessionCookie(token) });
 }
