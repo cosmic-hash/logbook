@@ -6,7 +6,6 @@ tasks/deadlines into categorized groups (Events, Work, Personal, School, Inbox).
 ## Quick start (local)
 
 ```bash
-cd logBook
 npm run dev
 ```
 
@@ -51,7 +50,6 @@ Or via CLI:
 ```bash
 npm i -g edgeone
 edgeone login
-cd logBook
 edgeone makers deploy . -n logbook
 ```
 
