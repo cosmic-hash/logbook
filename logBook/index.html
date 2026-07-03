@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Logbook</title>
+<style>
+  :root{
+    --paper: #F6F1E7;
+    --paper-line: #E7DFCC;
+    --ink: #262220;
+    --ink-soft: #6B6459;
+    --margin-red: #C2564B;
+    --teal: #2F6E68;
+    --amber: #B9822E;
+    --red: #B5533C;
+    --card: #FFFDF7;
+    --card-border: #E4DCC8;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      repeating-linear-gradient(to bottom, transparent 0px, transparent 34px, var(--paper-line) 35px),
+      var(--paper);
+    color:var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+  }
+  .page{ width:100%; max-width:720px; position:relative; padding:36px 28px 140px 56px; min-height:100vh; display:none; }
+  .margin-rule{ position:absolute; top:0; bottom:0; left:36px; width:2px; background:var(--margin-red); opacity:0.55; }
+  header{ display:flex; justify-content:space-between; align-items:baseline; }
+  header h1{ font-family: Georgia, "Times New Roman", serif; font-size:32px; margin:0 0 4px 0; }
+  header p{ margin:0; color:var(--ink-soft); font-size:14px; }
+  .signout{ background:none; border:none; color:var(--ink-soft); font-size:12px; cursor:pointer; text-decoration:underline; }
+  .section-label{ font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--ink-soft); margin:28px 0 10px 0; }
+  .category-group{ margin-bottom:20px; }
+  .category-header{ display:flex; align-items:center; gap:8px; margin:0 0 8px 0; font-family: Georgia, "Times New Roman", serif; font-size:17px; color:var(--ink); }
+  .category-count{ font-family: ui-monospace, monospace; font-size:11px; color:var(--ink-soft); background:#EFE9D8; border-radius:10px; padding:1px 8px; }
+  .empty{ color:var(--ink-soft); font-size:14px; font-style:italic; padding:8px 0; }
+  .task-row{ display:flex; align-items:flex-start; gap:10px; background:var(--card); border:1px solid var(--card-border); border-radius:3px; padding:10px 12px; margin-bottom:8px; cursor:pointer; }
+  .task-row.done{ opacity:0.55; }
+  .dot{ width:9px;height:9px;border-radius:50%; margin-top:5px; flex-shrink:0; }
+  .dot.ok{background:var(--teal);} .dot.soon{background:var(--amber);} .dot.overdue{background:var(--red);} .dot.none{background:#BEB7A6;}
+  .task-body{flex:1; min-width:0;}
+  .task-title{ font-size:15px; font-weight:600; }
+  .task-row.done .task-title{ text-decoration: line-through; text-decoration-color: var(--ink-soft); }
+  .task-meta{ margin-top:3px; display:flex; gap:10px; flex-wrap:wrap; font-family: ui-monospace, monospace; font-size:11.5px; color:var(--ink-soft); }
+  .tag{ background:#EFE9D8; border-radius:10px; padding:1px 8px; font-family: -apple-system, sans-serif; }
+  .task-notes-preview{ margin-top:4px; font-size:12.5px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .del-btn{ background:none;border:none;color:var(--ink-soft); cursor:pointer;font-size:15px;padding:2px 4px; flex-shrink:0; }
+  .del-btn:hover{color:var(--red);}
+  .journal{ display:flex; flex-direction:column; gap:10px; }
+  .entry{ font-size:13.5px; line-height:1.5; }
+  .entry .ts{ font-family: ui-monospace, monospace; font-size:10.5px; color:var(--ink-soft); margin-right:8px; }
+  .entry.agent{color:var(--teal);}
+  .composer{ position:fixed; bottom:0; left:0; right:0; display:flex; justify-content:center; background:linear-gradient(to top, var(--paper) 60%, transparent); padding:18px 0 22px 0; }
+  .composer-inner{ width:100%; max-width:720px; padding:0 28px 0 56px; display:flex; flex-direction:column; gap:6px; }
+  .composer-row{ display:flex; gap:8px; }
+  textarea{ flex:1; resize:none; border:1px solid var(--card-border); border-radius:6px; background:var(--card); padding:10px 12px; font-size:14px; font-family:inherit; color:var(--ink); min-height:44px; max-height:140px; }
+  textarea:focus{outline:2px solid var(--margin-red); outline-offset:1px;}
+  button.send, button.mic{ border:none; border-radius:6px; font-size:14px; cursor:pointer; }
+  button.send{ background:var(--ink); color:var(--paper); padding:0 18px; }
+  button.mic{ background:var(--card); border:1px solid var(--card-border); width:44px; }
+  button.mic.recording{ background:var(--red); color:white; }
+  button.send:disabled, button.mic:disabled{opacity:0.5; cursor:default;}
+  .status{ font-size:11.5px; color:var(--ink-soft); font-family: ui-monospace, monospace; height:16px; margin-top:2px; }
+
+  .overlay{ position:fixed; inset:0; background:rgba(38,34,32,0.35); display:none; align-items:center; justify-content:center; z-index:20; }
+  .overlay.open{ display:flex; }
+  .detail{ background:var(--card); border:1px solid var(--card-border); border-radius:8px; width:90%; max-width:480px; padding:22px; }
+  .detail h2{ margin:0 0 6px 0; font-family: Georgia, serif; font-size:20px; }
+  .detail .meta{ font-family: ui-monospace, monospace; font-size:12px; color:var(--ink-soft); margin-bottom:14px; }
+  .detail textarea.notes{ width:100%; min-height:100px; font-family:inherit; font-size:14px; padding:10px; border:1px solid var(--card-border); border-radius:6px; background:var(--paper); color:var(--ink); }
+  .detail-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:14px; }
+  .detail-actions button{ border:none; border-radius:6px; padding:8px 14px; font-size:13px; cursor:pointer; }
+  .btn-save{ background:var(--ink); color:var(--paper); }
+  .btn-close{ background:transparent; color:var(--ink-soft); }
+
+  /* auth screen */
+  .auth-wrap{ min-height:100vh; display:flex; align-items:center; justify-content:center; width:100%; }
+  .auth-card{ background:var(--card); border:1px solid var(--card-border); border-radius:8px; padding:32px; width:90%; max-width:360px; }
+  .auth-card h1{ font-family: Georgia, serif; font-size:28px; margin:0 0 4px 0; }
+  .auth-card p.tag{ background:none; padding:0; color:var(--ink-soft); font-size:13px; margin:0 0 20px 0; }
+  .auth-card input{ width:100%; padding:10px 12px; margin-bottom:10px; border:1px solid var(--card-border); border-radius:6px; background:var(--paper); font-size:14px; color:var(--ink); }
+  .auth-card button.primary{ width:100%; padding:10px; border:none; border-radius:6px; background:var(--ink); color:var(--paper); font-size:14px; cursor:pointer; margin-top:4px; }
+  .auth-toggle{ text-align:center; margin-top:14px; font-size:13px; color:var(--ink-soft); }
+  .auth-toggle a{ color:var(--margin-red); cursor:pointer; text-decoration:underline; }
+  .auth-error{ color:var(--red); font-size:12.5px; min-height:16px; margin-bottom:4px; }
+</style>
+</head>
+<body>
+
+<div class="auth-wrap" id="authWrap">
+  <div class="auth-card">
+    <h1>Logbook</h1>
+    <p class="tag" id="authSubtitle">Sign in to your log.</p>
+    <div class="auth-error" id="authError"></div>
+    <input type="email" id="authEmail" placeholder="Email" autocomplete="email">
+    <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password">
+    <button class="primary" id="authSubmit">Sign in</button>
+    <div class="auth-toggle" id="authToggle">No account yet? <a id="authToggleLink">Create one</a></div>
+  </div>
+</div>
+
+<div class="page" id="page">
+  <div class="margin-rule"></div>
+  <header>
+    <div>
+      <h1>Logbook</h1>
+      <p>Paste anything, talk, or type — it keeps track.</p>
+    </div>
+    <button class="signout" id="signoutBtn">Sign out</button>
+  </header>
+
+  <div class="section-label">Open items</div>
+  <div id="tasks"></div>
+  <div class="section-label" id="doneLabel" style="display:none;">Completed</div>
+  <div id="doneTasks"></div>
+
+  <div class="section-label">Log</div>
+  <div class="journal" id="journal"></div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="detail">
+    <h2 id="detailTitle"></h2>
+    <div class="meta" id="detailMeta"></div>
+    <textarea class="notes" id="detailNotes" placeholder="Notes..."></textarea>
+    <div class="detail-actions">
+      <button class="btn-close" onclick="closeDetail()">Close</button>
+      <button class="btn-save" onclick="saveDetailNotes()">Save notes</button>
+    </div>
+  </div>
+</div>
+
+<div class="composer" id="composer" style="display:none;">
+  <div class="composer-inner">
+    <div class="composer-row">
+      <textarea id="input" placeholder="e.g. paste an email, or say 'push the invoice task to Friday'"></textarea>
+      <button class="mic" id="micBtn" title="Talk instead">🎤</button>
+      <button class="send" id="sendBtn">Add</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+</div>
+
+<script>
+let tasks = [];
+let journal = [];
+let activeTaskId = null;
+let isSignup = false;
+let currentEmail = null;
+
+const API = { credentials: 'same-origin' };
+
+function journalKey(){ return currentEmail ? `logbook_journal_${currentEmail}` : 'logbook_journal'; }
+function loadJournal(){
+  journal = JSON.parse(localStorage.getItem(journalKey()) || '[]');
+}
+function saveJournal(){
+  localStorage.setItem(journalKey(), JSON.stringify(journal));
+}
+
+/* ---------- Auth ---------- */
+
+async function checkSession(){
+  try{
+    const res = await fetch('/api/me', API);
+    if(res.ok){
+      const data = await res.json();
+      currentEmail = data.email;
+      loadJournal();
+      showApp();
+      return;
+    }
+  }catch(e){}
+  showAuth();
+}
+
+function showAuth(){
+  currentEmail = null;
+  tasks = [];
+  document.getElementById('authWrap').style.display = 'flex';
+  document.getElementById('page').style.display = 'none';
+  document.getElementById('composer').style.display = 'none';
+}
+
+async function showApp(){
+  document.getElementById('authWrap').style.display = 'none';
+  document.getElementById('page').style.display = 'block';
+  document.getElementById('composer').style.display = 'flex';
+  await loadTasks();
+  renderJournal();
+}
+
+document.getElementById('authToggleLink').addEventListener('click', () => {
+  isSignup = !isSignup;
+  document.getElementById('authSubtitle').textContent = isSignup ? 'Create your log.' : 'Sign in to your log.';
+  document.getElementById('authSubmit').textContent = isSignup ? 'Create account' : 'Sign in';
+  document.getElementById('authToggle').innerHTML = isSignup
+    ? 'Already have an account? <a id="authToggleLink2">Sign in</a>'
+    : 'No account yet? <a id="authToggleLink2">Create one</a>';
+  document.getElementById('authToggleLink2').addEventListener('click', () => document.getElementById('authToggleLink').click());
+  document.getElementById('authError').textContent = '';
+});
+
+document.getElementById('authSubmit').addEventListener('click', async () => {
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const errEl = document.getElementById('authError');
+  errEl.textContent = '';
+
+  if(!email || !password){ errEl.textContent = 'Enter an email and password.'; return; }
+
+  try{
+    const res = await fetch(isSignup ? '/api/signup' : '/api/login', {
+      ...API,
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if(!res.ok){ errEl.textContent = data.error || 'Something went wrong.'; return; }
+    currentEmail = data.email;
+    loadJournal();
+    showApp();
+  }catch(e){
+    errEl.textContent = 'Could not reach the server.';
+  }
+});
+
+document.getElementById('signoutBtn').addEventListener('click', async () => {
+  await fetch('/api/logout', { ...API, method: 'POST' });
+  tasks = [];
+  showAuth();
+});
+
+/* ---------- Tasks ---------- */
+
+function uid(){ return Math.random().toString(36).slice(2,10); }
+
+function daysUntil(dateStr){
+  if(!dateStr) return null;
+  const d = new Date(dateStr + "T23:59:59");
+  return Math.ceil((d - new Date()) / (1000*60*60*24));
+}
+function urgencyClass(dateStr, done){
+  if(done || !dateStr) return "none";
+  const d = daysUntil(dateStr);
+  if(d < 0) return "overdue";
+  if(d <= 2) return "soon";
+  return "ok";
+}
+function fmtDate(dateStr){
+  if(!dateStr) return "no date";
+  const d = daysUntil(dateStr);
+  const nice = new Date(dateStr + "T00:00:00").toLocaleDateString(undefined, {month:"short", day:"numeric"});
+  if(d === 0) return nice + " · today";
+  if(d === 1) return nice + " · tomorrow";
+  if(d < 0) return nice + " · " + Math.abs(d) + "d overdue";
+  return nice + " · in " + d + "d";
+}
+const CATEGORY_ORDER = ['Events', 'Work', 'Personal', 'School', 'Inbox'];
+
+function sortTasks(list){
+  return [...list].sort((a,b)=>{
+    const da = a.deadline ? daysUntil(a.deadline) : Infinity;
+    const db = b.deadline ? daysUntil(b.deadline) : Infinity;
+    return da - db;
+  });
+}
+function escapeHtml(s){ const d = document.createElement('div'); d.innerText = s || ''; return d.innerHTML; }
+
+function taskCategory(t){ return t.category || 'Inbox'; }
+
+function groupByCategory(list){
+  const groups = {};
+  for(const t of list){
+    const cat = taskCategory(t);
+    if(!groups[cat]) groups[cat] = [];
+    groups[cat].push(t);
+  }
+  const ordered = [];
+  for(const cat of CATEGORY_ORDER){
+    if(groups[cat]?.length) ordered.push([cat, sortTasks(groups[cat])]);
+    delete groups[cat];
+  }
+  for(const cat of Object.keys(groups).sort()){
+    ordered.push([cat, sortTasks(groups[cat])]);
+  }
+  return ordered;
+}
+
+function renderTaskRow(t){
+  return `
+    <div class="task-row ${t.done ? 'done':''}" data-id="${t.id}" onclick="openDetail('${t.id}')">
+      <div class="dot ${urgencyClass(t.deadline, t.done)}" onclick="toggleDone('${t.id}', event)"></div>
+      <div class="task-body">
+        <div class="task-title">${escapeHtml(t.title)}</div>
+        <div class="task-meta"><span>${fmtDate(t.deadline)}</span></div>
+        ${t.notes ? `<div class="task-notes-preview">${escapeHtml(t.notes)}</div>` : ''}
+      </div>
+      <button class="del-btn" onclick="deleteTask('${t.id}', event)" title="Delete">✕</button>
+    </div>
+  `;
+}
+
+function renderCategoryGroups(list, el){
+  const groups = groupByCategory(list);
+  if(groups.length === 0){
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = groups.map(([cat, items]) => `
+    <div class="category-group">
+      <div class="category-header">${escapeHtml(cat)} <span class="category-count">${items.length}</span></div>
+      ${items.map(renderTaskRow).join('')}
+    </div>
+  `).join('');
+}
+
+function renderTasks(){
+  const open = tasks.filter(t => !t.done);
+  const done = tasks.filter(t => t.done);
+  const el = document.getElementById('tasks');
+  const doneEl = document.getElementById('doneTasks');
+  const doneLabel = document.getElementById('doneLabel');
+
+  if(open.length === 0 && done.length === 0){
+    el.innerHTML = '<div class="empty">Nothing tracked yet. Paste something below, talk, or type a task.</div>';
+    doneEl.innerHTML = '';
+    doneLabel.style.display = 'none';
+    return;
+  }
+
+  if(open.length === 0){
+    el.innerHTML = '<div class="empty">No open items — all caught up.</div>';
+  } else {
+    renderCategoryGroups(open, el);
+  }
+
+  if(done.length > 0){
+    doneLabel.style.display = 'block';
+    renderCategoryGroups(done, doneEl);
+  } else {
+    doneLabel.style.display = 'none';
+    doneEl.innerHTML = '';
+  }
+}
+
+function renderJournal(){
+  const el = document.getElementById('journal');
+  if(journal.length === 0){ el.innerHTML = '<div class="empty">Your log entries will show up here.</div>'; return; }
+  el.innerHTML = journal.slice(-30).map(e => `<div class="entry ${e.role}"><span class="ts">${e.ts}</span>${escapeHtml(e.text)}</div>`).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+async function loadTasks(){
+  try{
+    const res = await fetch('/api/tasks', API);
+    if(res.status === 401){ showAuth(); return; }
+    if(res.ok){
+      const data = await res.json();
+      tasks = (data.tasks || []).map(t => ({ ...t, category: t.category || 'Inbox' }));
+    }
+  }catch(e){}
+  renderTasks();
+}
+
+async function persistTasks(){
+  saveJournal();
+  try{
+    await fetch('/api/tasks', {
+      ...API,
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ tasks })
+    });
+  }catch(e){}
+}
+
+function toggleDone(id, evt){ evt.stopPropagation(); tasks = tasks.map(t => t.id === id ? {...t, done: !t.done} : t); persistTasks(); renderTasks(); }
+function deleteTask(id, evt){ evt.stopPropagation(); tasks = tasks.filter(t => t.id !== id); persistTasks(); renderTasks(); }
+
+function openDetail(id){
+  const t = tasks.find(x => x.id === id);
+  if(!t) return;
+  activeTaskId = id;
+  document.getElementById('detailTitle').textContent = t.title;
+  document.getElementById('detailMeta').textContent = fmtDate(t.deadline) + (t.category ? ' · ' + t.category : '');
+  document.getElementById('detailNotes').value = t.notes || '';
+  document.getElementById('overlay').classList.add('open');
+}
+function closeDetail(){ document.getElementById('overlay').classList.remove('open'); activeTaskId = null; }
+function saveDetailNotes(){
+  if(!activeTaskId) return;
+  const val = document.getElementById('detailNotes').value;
+  tasks = tasks.map(t => t.id === activeTaskId ? {...t, notes: val} : t);
+  persistTasks(); renderTasks(); closeDetail();
+}
+
+function nowTs(){ return new Date().toLocaleTimeString(undefined, {hour:'2-digit', minute:'2-digit'}); }
+
+async function handleSend(){
+  const input = document.getElementById('input');
+  const text = input.value.trim();
+  if(!text) return;
+  const btn = document.getElementById('sendBtn');
+  const status = document.getElementById('status');
+  btn.disabled = true;
+  status.textContent = 'thinking…';
+
+  journal.push({role:'user', text, ts: nowTs()});
+  renderJournal();
+  input.value = '';
+
+  try{
+    const res = await fetch('/api/chat', {
+      ...API,
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ message: text })
+    });
+    const parsed = await res.json();
+    if(res.status === 401){ showAuth(); return; }
+    tasks = Array.isArray(parsed.tasks) ? parsed.tasks.map(t => ({ ...t, category: t.category || 'Inbox' })) : tasks;
+    journal.push({role:'agent', text: parsed.reply || 'Done.', ts: nowTs()});
+  }catch(e){
+    journal.push({role:'agent', text: "Couldn't reach the server — try again.", ts: nowTs()});
+  }
+
+  saveJournal();
+  renderTasks();
+  renderJournal();
+  status.textContent = '';
+  btn.disabled = false;
+}
+
+document.getElementById('sendBtn').addEventListener('click', handleSend);
+document.getElementById('input').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); }
+});
+
+/* Voice input */
+const micBtn = document.getElementById('micBtn');
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+if(SpeechRecognition){
+  const recognition = new SpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.onresult = (e) => {
+    document.getElementById('input').value = e.results[0][0].transcript;
+    micBtn.classList.remove('recording');
+  };
+  recognition.onerror = () => micBtn.classList.remove('recording');
+  recognition.onend = () => micBtn.classList.remove('recording');
+  micBtn.addEventListener('click', () => { micBtn.classList.add('recording'); recognition.start(); });
+} else {
+  micBtn.disabled = true;
+  micBtn.title = "Voice input not supported in this browser";
+}
+
+checkSession();
+</script>
+</body>
+</html>
