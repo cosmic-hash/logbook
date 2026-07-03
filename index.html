@@ -89,6 +89,37 @@
   .auth-toggle{ text-align:center; margin-top:14px; font-size:13px; color:var(--ink-soft); }
   .auth-toggle a{ color:var(--margin-red); cursor:pointer; text-decoration:underline; }
   .auth-error{ color:var(--red); font-size:12.5px; min-height:16px; margin-bottom:4px; }
+
+  /* reminders */
+  .reminder-banner{
+    display:none; margin:16px 0 0 0; padding:10px 14px; border-radius:6px;
+    font-size:13px; line-height:1.45; border:1px solid var(--card-border); background:var(--card);
+  }
+  .reminder-banner.show{ display:block; }
+  .reminder-banner.overdue{ border-color:#E8B4AB; background:#FFF6F3; }
+  .reminder-banner.soon{ border-color:#E8D4A8; background:#FFFBF0; }
+  .reminder-banner strong{ font-weight:600; }
+  .reminder-banner button{
+    margin-left:10px; background:none; border:none; color:var(--ink-soft);
+    font-size:12px; cursor:pointer; text-decoration:underline;
+  }
+  .reminder-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:4px; }
+  .reminder-item{
+    display:flex; align-items:center; gap:8px; padding:8px 10px;
+    background:var(--card); border:1px solid var(--card-border); border-radius:4px;
+    font-size:13px; cursor:pointer;
+  }
+  .reminder-item:hover{ border-color:var(--margin-red); }
+  .reminder-item .ri-dot{ width:7px;height:7px;border-radius:50%; flex-shrink:0; }
+  .reminder-item .ri-title{ flex:1; font-weight:500; }
+  .reminder-item .ri-when{ font-family:ui-monospace,monospace; font-size:11px; color:var(--ink-soft); }
+  .toast{
+    position:fixed; top:20px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:var(--paper); padding:10px 16px; border-radius:6px;
+    font-size:13px; z-index:30; opacity:0; pointer-events:none; transition:opacity 0.25s;
+    max-width:90%; text-align:center;
+  }
+  .toast.show{ opacity:1; pointer-events:auto; }
 </style>
 </head>
 <body>
@@ -115,14 +146,21 @@
     <button class="signout" id="signoutBtn">Sign out</button>
   </header>
 
+  <div class="reminder-banner" id="reminderBanner"></div>
+
+  <div class="section-label" id="remindersLabel" style="display:none;">Reminders</div>
+  <div class="reminder-list" id="reminders"></div>
+
   <div class="section-label">Open items</div>
   <div id="tasks"></div>
   <div class="section-label" id="doneLabel" style="display:none;">Completed</div>
   <div id="doneTasks"></div>
 
   <div class="section-label">Log</div>
-  <div class="journal" id="journal"></div>
+  <div class="journal" id="journal">  </div>
 </div>
+
+<div class="toast" id="toast"></div>
 
 <div class="overlay" id="overlay">
   <div class="detail">
@@ -183,6 +221,7 @@ async function checkSession(){
 function showAuth(){
   currentEmail = null;
   tasks = [];
+  stopReminders();
   document.getElementById('authWrap').style.display = 'flex';
   document.getElementById('page').style.display = 'none';
   document.getElementById('composer').style.display = 'none';
@@ -194,6 +233,7 @@ async function showApp(){
   document.getElementById('composer').style.display = 'flex';
   await loadTasks();
   renderJournal();
+  startReminders();
 }
 
 document.getElementById('authToggleLink').addEventListener('click', () => {
@@ -263,6 +303,111 @@ function fmtDate(dateStr){
   if(d < 0) return nice + " · " + Math.abs(d) + "d overdue";
   return nice + " · in " + d + "d";
 }
+
+/* ---------- Reminders (in-page) ---------- */
+
+function reminderTasks(){
+  return tasks.filter(t => !t.done && t.deadline).map(t => ({ ...t, days: daysUntil(t.deadline) }))
+    .filter(t => t.days <= 2)
+    .sort((a,b) => a.days - b.days);
+}
+
+function notifiedKey(){ return currentEmail ? `logbook_notified_${currentEmail}` : 'logbook_notified'; }
+function loadNotified(){
+  try{ return JSON.parse(localStorage.getItem(notifiedKey()) || '{}'); }catch(e){ return {}; }
+}
+function saveNotified(map){ localStorage.setItem(notifiedKey(), JSON.stringify(map)); }
+
+function showToast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+function renderReminderBanner(){
+  const el = document.getElementById('reminderBanner');
+  const list = reminderTasks();
+  if(list.length === 0){ el.className = 'reminder-banner'; el.innerHTML = ''; return; }
+
+  const overdue = list.filter(t => t.days < 0).length;
+  const today = list.filter(t => t.days === 0).length;
+  const tomorrow = list.filter(t => t.days === 1).length;
+  const parts = [];
+  if(overdue) parts.push(`<strong>${overdue} overdue</strong>`);
+  if(today) parts.push(`<strong>${today} due today</strong>`);
+  if(tomorrow) parts.push(`${tomorrow} due tomorrow`);
+
+  const cls = overdue ? 'overdue' : 'soon';
+  const notifyBtn = ('Notification' in window && Notification.permission === 'default')
+    ? `<button type="button" id="enableNotifyBtn">Enable alerts</button>` : '';
+
+  el.className = `reminder-banner show ${cls}`;
+  el.innerHTML = `⏰ ${parts.join(' · ')}${notifyBtn}`;
+  const btn = document.getElementById('enableNotifyBtn');
+  if(btn) btn.onclick = () => Notification.requestPermission().then(() => renderReminderBanner());
+}
+
+function renderReminders(){
+  const list = reminderTasks();
+  const label = document.getElementById('remindersLabel');
+  const el = document.getElementById('reminders');
+  if(list.length === 0){
+    label.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  label.style.display = 'block';
+  el.innerHTML = list.map(t => `
+    <div class="reminder-item" onclick="openDetail('${t.id}')">
+      <div class="ri-dot dot ${urgencyClass(t.deadline, false)}"></div>
+      <span class="ri-title">${escapeHtml(t.title)}</span>
+      <span class="ri-when">${fmtDate(t.deadline)}</span>
+    </div>
+  `).join('');
+}
+
+function checkReminderAlerts(){
+  renderReminderBanner();
+  renderReminders();
+
+  const list = reminderTasks();
+  const notified = loadNotified();
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  for(const t of list){
+    const key = `${t.id}:${t.deadline}`;
+    if(notified[key] === todayStr) continue;
+
+    let msg = null;
+    if(t.days < 0) msg = `Overdue: ${t.title}`;
+    else if(t.days === 0) msg = `Due today: ${t.title}`;
+    else if(t.days === 1) msg = `Due tomorrow: ${t.title}`;
+
+    if(!msg) continue;
+
+    if(document.visibilityState === 'visible') showToast(msg);
+
+    if('Notification' in window && Notification.permission === 'granted'){
+      new Notification('Logbook', { body: msg, tag: key });
+    }
+
+    notified[key] = todayStr;
+  }
+  saveNotified(notified);
+}
+
+let reminderInterval = null;
+function startReminders(){
+  if(reminderInterval) clearInterval(reminderInterval);
+  checkReminderAlerts();
+  reminderInterval = setInterval(checkReminderAlerts, 5 * 60 * 1000);
+}
+function stopReminders(){
+  if(reminderInterval){ clearInterval(reminderInterval); reminderInterval = null; }
+}
+
 const CATEGORY_ORDER = ['Events', 'Work', 'Personal', 'School', 'Inbox'];
 
 function sortTasks(list){
@@ -333,6 +478,7 @@ function renderTasks(){
     el.innerHTML = '<div class="empty">Nothing tracked yet. Paste something below, talk, or type a task.</div>';
     doneEl.innerHTML = '';
     doneLabel.style.display = 'none';
+    checkReminderAlerts();
     return;
   }
 
@@ -341,6 +487,8 @@ function renderTasks(){
   } else {
     renderCategoryGroups(open, el);
   }
+
+  checkReminderAlerts();
 
   if(done.length > 0){
     doneLabel.style.display = 'block';

@@ -72,12 +72,30 @@ Each group is its own section on the board — personal chores in one place, aca
 
 ---
 
+## In-page reminders
+
+Logbook surfaces what needs attention **before you forget** — no email setup required.
+
+| Reminder type | What you see |
+|---------------|--------------|
+| **Overdue** | Red banner + task in Reminders section |
+| **Due today** | Amber banner + in-page toast |
+| **Due tomorrow** | Listed under Reminders |
+| **Browser alerts** | Optional — click "Enable alerts" for system notifications |
+
+Reminders run while you're logged in and recheck every 5 minutes. Tasks with deadlines automatically appear — no extra input needed.
+
+**Future:** email reminders and Gmail-triggered alerts (see roadmap below).
+
+---
+
 ## Key features
 
 - **Conversational input** — type, paste, or use voice (Chrome/Safari)
 - **AI-powered extraction** — EdgeOne Makers Models (`@makers/deepseek-v4-flash`)
 - **Smart categorization** — tasks sorted into Events, Work, Personal, School
 - **Deadline awareness** — parses "July 3rd", "tomorrow", "next Friday"
+- **In-page reminders** — banner + reminder list for overdue, today, and tomorrow; optional browser alerts
 - **Urgency indicators** — color-coded dots for overdue, due soon, on track
 - **Real accounts** — sign up, sign in, tasks persist across sessions
 - **Activity log** — see what you said and what the agent did
@@ -98,9 +116,10 @@ Logbook is built as an **extensible AI agent**, not a closed todo app.
 
 **Future extensions**
 
+- Email reminders (scheduled before deadlines)
 - Slack / Teams thread ingestion
 - Calendar sync (Google Calendar, Outlook)
-- Smart reminders and daily briefings
+- Daily briefing digest
 - Shared lists for teams or households
 
 The architecture is simple: **input source → AI agent → categorized task store**. Gmail is the next input source.
@@ -168,8 +187,10 @@ edgeone makers deploy . -n logbook
 2. *"I'm going to mini hackathon on July 3rd at Agent Forge SF"* → **Events**
 3. *"Do laundry tomorrow"* → **Personal**
 4. *"Submit CS homework by Friday"* → **School**
-5. Click task → add notes → mark done
-6. Sign out → sign in → tasks persist
+5. Show **Reminders** banner (task due tomorrow appears automatically)
+6. Click **Enable alerts** → optional browser notification
+7. Click task → add notes → mark done
+8. Sign out → sign in → tasks persist
 
 ---
 
@@ -195,4 +216,4 @@ supabase.sql                    → database setup
 
 ## One-liner for slides
 
-> **Logbook** — paste anything, talk, or type. An AI agent turns your messy input into categorized, dated tasks. Personal task management that meets you where you already write — extensible to Gmail next.
+> **Logbook** — paste anything, talk, or type. An AI agent turns your messy input into categorized, dated tasks with in-page reminders. Personal task management that meets you where you already write — extensible to Gmail next.
