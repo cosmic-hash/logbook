@@ -79,10 +79,39 @@ function parseDeadline(text, todayIso) {
 
 function inferCategory(text) {
   const t = text.toLowerCase();
-  if (/\b(hackathon|conference|meetup|workshop|event|webinar|summit)\b/.test(t)) return "Events";
-  if (/\b(invoice|client|deadline|project|meeting|standup|sprint|deploy|release|pr\b|code review|submit|report)\b/.test(t)) return "Work";
-  if (/\b(doctor|gym|dentist|groceries|family|birthday|flight|hotel|trip)\b/.test(t)) return "Personal";
-  if (/\b(homework|exam|class|study|assignment|course)\b/.test(t)) return "School";
+
+  // Events — hackathons, conferences, outings with a date/place
+  if (/\b(hackathon|hackthon|conference|meetup|workshop|webinar|summit|symposium|demo day|networking|agent forge|mini hack)\b/.test(t)) {
+    return "Events";
+  }
+  if (/\b(going to|attending|register for|sign up for)\b/.test(t) && !/\b(class|lecture|exam|homework|meeting|standup|office|doctor|dentist|gym)\b/.test(t)) {
+    return "Events";
+  }
+
+  // School — academic work
+  if (/\b(homework|exam|midterm|finals?|quiz|assignment|coursework|lecture|professor|syllabus|thesis|dissertation|lab report|problem set|pset|study for|research paper|term paper|cs \d|math \d|biology|chemistry|physics class|school project|class project)\b/.test(t)) {
+    return "School";
+  }
+  if (/\b(class|course)\b/.test(t) && /\b(study|due|submit|read|write|prepare)\b/.test(t)) {
+    return "School";
+  }
+
+  // Work — job / professional
+  if (/\b(invoice|client|coworker|boss|jira|standup|sprint|deploy|release|pull request|pr\b|code review|interview|offer letter|timesheet|presentation|stakeholder|roadmap|okr)\b/.test(t)) {
+    return "Work";
+  }
+  if (/\b(meeting|project|deadline|report)\b/.test(t) && !/\b(family|doctor|class|school)\b/.test(t)) {
+    return "Work";
+  }
+
+  // Personal — chores, errands, health, life admin
+  if (/\b(laundry|dishes|clean(ing)?|vacuum|chores?|errands?|groceries|grocery shopping|pharmacy|prescription|haircut|dry cleaning|take out trash|mow lawn|wash car|pick up dry cleaning)\b/.test(t)) {
+    return "Personal";
+  }
+  if (/\b(doctor|dentist|gym|workout|yoga|therapy|birthday|anniversary|family|parents|flight|hotel|trip|vacation|pack for)\b/.test(t)) {
+    return "Personal";
+  }
+
   return "Inbox";
 }
 
@@ -104,7 +133,7 @@ function looksLikeTask(message) {
   const t = message.toLowerCase();
   if (/\b(mark|complete|finish)\b/.test(t) && /\bdone\b/.test(t)) return false;
   return (
-    /\b(planning|plan to|attend|attending|going to|register|sign up|remind|need to|have to|must|should|todo|task|deadline|due|by friday|by monday|hackathon|conference|meeting|submit|send|finish|complete|prepare|book|schedule|mark|done)\b/.test(t) ||
+    /\b(planning|plan to|attend|attending|going to|register|sign up|remind|need to|have to|must|should|todo|task|deadline|due|by friday|by monday|hackathon|hackthon|conference|meeting|standup|submit|send|finish|complete|prepare|book|schedule|mark|done|laundry|dishes|homework|exam|assignment|chores?|errands?|dentist|doctor|gym)\b/.test(t) ||
     /\b(january|february|march|april|may|june|july|august|september|october|november|december|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2})\b/.test(t)
   );
 }

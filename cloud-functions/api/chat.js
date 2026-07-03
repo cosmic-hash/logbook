@@ -3,11 +3,11 @@ import { getSessionEmail, getTasks, saveTasks, json } from "./_lib.js";
 import { localExtract } from "./_extract.js";
 
 const CATEGORY_HINTS = [
-  "Events — hackathons, conferences, meetups, workshops",
-  "Work — projects, deadlines, meetings, clients",
-  "Personal — errands, health, travel, family",
-  "School — classes, exams, assignments",
-  "Inbox — anything that doesn't fit elsewhere",
+  "Events — hackathons, conferences, meetups, workshops, competitions, social outings you're attending",
+  "Work — job tasks, meetings, deadlines, clients, projects, code reviews, interviews",
+  "Personal — chores (laundry, dishes, cleaning), errands, groceries, health appointments, gym, travel, family",
+  "School — homework, exams, quizzes, assignments, lectures, study sessions, research papers, class projects",
+  "Inbox — only when nothing else fits",
 ];
 
 export async function onRequestPost(context) {
@@ -27,7 +27,8 @@ export async function onRequestPost(context) {
   const tasks = await getTasks(env, email);
   const today = new Date().toISOString().slice(0, 10);
 
-  if (!env.MAKERS_MODELS_KEY) {
+  const aiKey = env.MAKERS_MODELS_KEY || process.env.MAKERS_MODELS_KEY;
+  if (!aiKey) {
     const fallback = localExtract(message, tasks, today);
     await saveTasks(env, email, fallback.tasks);
     return json(fallback);
@@ -36,14 +37,22 @@ export async function onRequestPost(context) {
   const systemPrompt = `You maintain a personal task/notes tracker. Today's date is ${today}.
 Current tasks (JSON): ${JSON.stringify(tasks)}
 
-Categories (always assign one):
+Categories — ALWAYS assign exactly one. Group similar tasks together:
 ${CATEGORY_HINTS.map((h) => `- ${h}`).join("\n")}
 
-The user message may be a plan ("planning to attend a hackathon on July 3rd"), an instruction, an update, or pasted content (email, Slack, notes) with buried tasks.
+Examples:
+- "mini hackathon on July 3rd" → Events
+- "do laundry this weekend" → Personal
+- "submit CS homework by Friday" → School
+- "standup with team tomorrow" → Work
+- "dentist appointment Thursday" → Personal
+
+The user message may be a plan, instruction, update, or pasted content (email, Slack, notes) with multiple buried tasks.
 
 Rules:
-- Plans and events ARE tasks. "Planning to attend X on DATE" → create a task titled clearly (e.g. "Attend Tencent mini hackathon") with category "Events" and deadline on that date.
-- Assign every task exactly one category from the list above.
+- Plans and events ARE tasks. "Going to X on DATE" → Events with a clear title and deadline.
+- Chores and life admin → Personal. Academic work → School. Job/professional → Work.
+- NEVER default to Inbox if a better category exists.
 - Parse dates like "July 3rd", "7/3", "2026-07-03" into YYYY-MM-DD using today's year when year is omitted.
 - When pasted content has multiple items, create multiple tasks in the right categories.
 
@@ -59,7 +68,7 @@ Respond with ONLY a JSON object, no markdown fences:
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.MAKERS_MODELS_KEY}`,
+        Authorization: `Bearer ${aiKey}`,
       },
       body: JSON.stringify({
         model: "@makers/deepseek-v4-flash",
