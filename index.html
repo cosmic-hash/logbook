@@ -1016,11 +1016,16 @@ const composerBar = document.querySelector('.composer-bar');
 const MIC_ICON_IDLE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>`;
 const MIC_ICON_RECORDING = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>`;
 let micIsRecording = false;
+let micRecognitionActive = false;
 let micManualStop = false;
+let micHadError = false;
+let micRestartTimer = null;
+let micUseContinuous = true;
 let micBaseText = '';
 let micFinalTranscript = '';
 let micInterimTranscript = '';
 let micStatusTimer = null;
+const IS_SAFARI = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 function setComposerStatus(msg, type){
   const status = document.getElementById('status');
@@ -1067,10 +1072,12 @@ function syncMicToInput(){
 }
 
 function finishMicRecording(){
+  clearMicRestartTimer();
   micInterimTranscript = '';
   syncMicToInput();
   setMicRecording(false);
   micManualStop = false;
+  micRecognitionActive = false;
   if(micFinalTranscript.trim() || micBaseText.trim()){
     showMicStatus('Got it — review or send', 'success', 2500);
   } else {
@@ -1078,65 +1085,172 @@ function finishMicRecording(){
   }
 }
 
+function clearMicRestartTimer(){
+  if(micRestartTimer){
+    clearTimeout(micRestartTimer);
+    micRestartTimer = null;
+  }
+}
+
+function micErrorMessage(error){
+  if(error === 'not-allowed' || error === 'service-not-allowed'){
+    return 'Microphone blocked — allow access in browser settings';
+  }
+  if(error === 'audio-capture') return 'No microphone found. Check your device.';
+  if(error === 'network') return 'Voice needs internet connection';
+  if(error === 'no-speech') return 'No speech detected — tap mic and try again.';
+  return 'Microphone error — try again.';
+}
+
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 if(SpeechRecognition){
   const recognition = new SpeechRecognition();
-  recognition.continuous = true;
   recognition.interimResults = true;
+  if(IS_SAFARI) micUseContinuous = false;
+
+  function applyMicContinuousMode(){
+    recognition.continuous = micUseContinuous;
+  }
+  applyMicContinuousMode();
+
+  function safeRecognitionStart(){
+    if(micRecognitionActive) return true;
+    try{
+      recognition.start();
+      return true;
+    }catch(err){
+      micRecognitionActive = false;
+      return false;
+    }
+  }
+
+  function safeRecognitionStop(){
+    clearMicRestartTimer();
+    if(!micRecognitionActive && !micIsRecording) return;
+    try{
+      recognition.stop();
+    }catch(err){}
+    micRecognitionActive = false;
+  }
+
+  function scheduleMicRestart(){
+    clearMicRestartTimer();
+    micRestartTimer = setTimeout(() => {
+      micRestartTimer = null;
+      if(micHadError || micManualStop || !micIsRecording) return;
+      if(!safeRecognitionStart()){
+        finishMicRecording();
+        showMicStatus('Could not continue listening.', 'error', 5000);
+      }
+    }, 250);
+  }
+
+  function startMicRecognition(){
+    if(micIsRecording || micRecognitionActive) return micIsRecording;
+    micHadError = false;
+    applyMicContinuousMode();
+    if(safeRecognitionStart()){
+      setMicRecording(true);
+      return true;
+    }
+    if(micUseContinuous){
+      micUseContinuous = false;
+      applyMicContinuousMode();
+      if(safeRecognitionStart()){
+        setMicRecording(true);
+        if(IS_SAFARI){
+          showMicStatus('Listening… tap mic again after each phrase', 'recording');
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  recognition.onstart = () => {
+    micRecognitionActive = true;
+    micHadError = false;
+  };
+
   recognition.onresult = (e) => {
     micInterimTranscript = '';
+    let gotFinal = false;
     for(let i = e.resultIndex; i < e.results.length; i++){
       const transcript = e.results[i][0].transcript;
       if(e.results[i].isFinal){
         micFinalTranscript += transcript;
+        gotFinal = true;
       } else {
         micInterimTranscript = transcript;
       }
     }
     syncMicToInput();
+    if(!micUseContinuous && gotFinal && micIsRecording && !micManualStop){
+      micManualStop = true;
+      safeRecognitionStop();
+    }
   };
+
   recognition.onerror = (e) => {
     if(e.error === 'aborted') return;
     if(e.error === 'no-speech' && micIsRecording && !micManualStop) return;
+    clearMicRestartTimer();
+    micRecognitionActive = false;
+    const fatalErrors = ['not-allowed', 'service-not-allowed', 'network', 'audio-capture'];
+    if(micUseContinuous && !fatalErrors.includes(e.error)){
+      micUseContinuous = false;
+      applyMicContinuousMode();
+      if(micIsRecording && !micManualStop){
+        scheduleMicRestart();
+        return;
+      }
+    }
+    micHadError = true;
     setMicRecording(false);
     micManualStop = false;
     micInterimTranscript = '';
     syncMicToInput();
-    let msg = 'Microphone error — try again.';
-    if(e.error === 'not-allowed') msg = 'Microphone access denied. Allow mic in browser settings.';
-    else if(e.error === 'no-speech') msg = 'No speech detected — tap mic and try again.';
-    else if(e.error === 'audio-capture') msg = 'No microphone found. Check your device.';
-    showMicStatus(msg, 'error', 5000);
+    showMicStatus(micErrorMessage(e.error), 'error', 5000);
   };
+
   recognition.onend = () => {
+    micRecognitionActive = false;
     if(micManualStop){
       finishMicRecording();
       return;
     }
-    if(!micIsRecording) return;
-    try{
-      recognition.start();
-    }catch(err){
+    if(micHadError || !micIsRecording) return;
+    if(!micUseContinuous){
       finishMicRecording();
-      showMicStatus('Could not continue listening.', 'error', 5000);
+      if(micFinalTranscript.trim()){
+        showMicStatus('Got it — review or send', 'success', 2500);
+      }
+      return;
     }
+    scheduleMicRestart();
   };
+
   micBtn.addEventListener('click', () => {
     if(micIsRecording){
       micManualStop = true;
-      recognition.stop();
+      safeRecognitionStop();
       return;
     }
     micManualStop = false;
+    micHadError = false;
     micBaseText = document.getElementById('input').value;
     micFinalTranscript = '';
     micInterimTranscript = '';
-    try{
-      setMicRecording(true);
-      recognition.start();
-    }catch(err){
+    if(!startMicRecognition()){
       setMicRecording(false);
-      showMicStatus('Could not start microphone.', 'error', 5000);
+      micRecognitionActive = false;
+      showMicStatus(
+        IS_SAFARI
+          ? 'Voice input unavailable — try Chrome or tap mic after each phrase'
+          : 'Could not start microphone.',
+        'error',
+        5000
+      );
     }
   });
   setComposerStatus('Tap mic to speak', '');
