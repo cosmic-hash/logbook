@@ -147,6 +147,8 @@ async function testIndexHtml() {
   assert(html.includes("MIC_NETWORK_RETRY_MAX"), "should have mic network retry config");
   assert(html.includes("browser's cloud service"), "should have improved mic network error message");
   assert(html.includes("stopMicRecording"), "should have mic manual stop helper");
+  assert(html.includes("liveTranscript"), "should have live transcript area");
+  assert(html.includes("recognition.interimResults = true"), "should enable interim speech results");
   console.log("  ✓ index.html loads with new UI");
 }
 

@@ -245,6 +245,32 @@
   .status.status-success{ color:var(--teal); }
   .status.status-error{ color:var(--red); }
 
+  .live-transcript{
+    display:none; margin:0 4px 0 12px;
+    background:var(--paper); border:1px solid var(--card-border);
+    border-left:3px solid transparent; border-radius:8px;
+    padding:8px 12px 10px; font-size:14px; line-height:1.45;
+    box-shadow:0 1px 3px rgba(38,34,32,0.04);
+    transition:border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  }
+  .live-transcript.visible{ display:block; }
+  .live-transcript.is-recording{
+    border-left-color:var(--margin-red);
+    background:#FFFDF9;
+    box-shadow:0 2px 8px rgba(194,86,75,0.1);
+  }
+  .live-transcript-label{
+    font-family:ui-monospace,monospace; font-size:10px;
+    text-transform:uppercase; letter-spacing:1.1px;
+    color:var(--ink-soft); margin-bottom:5px;
+  }
+  .live-transcript-label .word-count{ color:var(--margin-red); font-weight:600; }
+  .live-transcript-body{ min-height:1.4em; word-break:break-word; }
+  .live-transcript .live-final{ color:var(--ink); }
+  .live-transcript .live-interim{ color:var(--ink-soft); font-style:italic; opacity:0.88; }
+  .live-transcript .live-waiting{ color:var(--ink-soft); font-style:italic; font-size:13px; }
+  #input.is-recording::placeholder{ color:var(--margin-red); opacity:0.65; font-style:italic; }
+
   .overlay{ position:fixed; inset:0; background:rgba(38,34,32,0.35); display:none; align-items:center; justify-content:center; z-index:20; padding:16px; }
   .overlay.open{ display:flex; }
   .detail{
@@ -418,6 +444,12 @@
 
 <div class="composer" id="composer" style="display:none;">
   <div class="composer-inner">
+    <div class="live-transcript" id="liveTranscript" aria-live="polite" aria-atomic="true">
+      <div class="live-transcript-label" id="liveTranscriptLabel">Heard</div>
+      <div class="live-transcript-body" id="liveTranscriptBody">
+        <span class="live-waiting">Speak now…</span>
+      </div>
+    </div>
     <div class="composer-bar">
       <div class="composer-input-wrap">
         <textarea id="input" rows="1" placeholder="Paste, type, or talk…"></textarea>
@@ -1013,6 +1045,12 @@ document.getElementById('input').addEventListener('keydown', (e) => {
 const micBtn = document.getElementById('micBtn');
 const recordingBadge = document.getElementById('recordingBadge');
 const composerBar = document.querySelector('.composer-bar');
+const liveTranscript = document.getElementById('liveTranscript');
+const liveTranscriptLabel = document.getElementById('liveTranscriptLabel');
+const liveTranscriptBody = document.getElementById('liveTranscriptBody');
+const inputEl = document.getElementById('input');
+const INPUT_PLACEHOLDER_IDLE = 'Paste, type, or talk…';
+const INPUT_PLACEHOLDER_RECORDING = 'Speak now…';
 const MIC_ICON_IDLE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>`;
 const MIC_ICON_RECORDING = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>`;
 let micIsRecording = false;
@@ -1047,6 +1085,52 @@ function showMicStatus(msg, type, duration){
   }
 }
 
+function micWordCount(text){
+  const trimmed = text.trim();
+  if(!trimmed) return 0;
+  return trimmed.split(/\s+/).length;
+}
+
+function updateLiveTranscript(){
+  if(!liveTranscriptBody) return;
+  const spoken = (micFinalTranscript + micInterimTranscript).trim();
+  const words = micWordCount(micFinalTranscript + ' ' + micInterimTranscript);
+  if(liveTranscriptLabel){
+    if(micIsRecording){
+      liveTranscriptLabel.innerHTML = spoken
+        ? `Heard · <span class="word-count">${words} word${words === 1 ? '' : 's'}</span>`
+        : 'Listening…';
+    } else {
+      liveTranscriptLabel.textContent = 'Heard';
+    }
+  }
+  if(!spoken){
+    liveTranscriptBody.innerHTML = micIsRecording
+      ? '<span class="live-waiting">Speak now…</span>'
+      : '';
+    return;
+  }
+  const finalHtml = micFinalTranscript
+    ? `<span class="live-final">${escapeHtml(micFinalTranscript)}</span>`
+    : '';
+  const interimHtml = micInterimTranscript
+    ? `<span class="live-interim">${escapeHtml(micInterimTranscript)}</span>`
+    : '';
+  liveTranscriptBody.innerHTML = finalHtml + interimHtml;
+  if(micIsRecording){
+    const statusMsg = spoken
+      ? `Listening… (speak clearly) · ${words} word${words === 1 ? '' : 's'}`
+      : 'Listening… (speak clearly)';
+    setComposerStatus(statusMsg, 'recording');
+  }
+}
+
+function clearLiveTranscript(){
+  if(liveTranscript) liveTranscript.classList.remove('visible', 'is-recording');
+  if(liveTranscriptLabel) liveTranscriptLabel.textContent = 'Heard';
+  if(liveTranscriptBody) liveTranscriptBody.innerHTML = '';
+}
+
 function setMicRecording(active){
   micIsRecording = active;
   micBtn.classList.toggle('recording', active);
@@ -1056,22 +1140,34 @@ function setMicRecording(active){
   micBtn.innerHTML = active ? MIC_ICON_RECORDING : MIC_ICON_IDLE;
   if(recordingBadge) recordingBadge.classList.toggle('visible', active);
   if(composerBar) composerBar.classList.toggle('is-recording', active);
+  if(liveTranscript){
+    liveTranscript.classList.toggle('visible', active);
+    liveTranscript.classList.toggle('is-recording', active);
+  }
+  if(inputEl){
+    inputEl.classList.toggle('is-recording', active);
+    inputEl.placeholder = active ? INPUT_PLACEHOLDER_RECORDING : INPUT_PLACEHOLDER_IDLE;
+  }
   if(active){
     clearTimeout(micStatusTimer);
-    setComposerStatus('Listening…', 'recording');
+    updateLiveTranscript();
+    setComposerStatus('Listening… (speak clearly)', 'recording');
+  } else {
+    clearLiveTranscript();
+    if(inputEl) inputEl.placeholder = INPUT_PLACEHOLDER_IDLE;
   }
 }
 
 function syncMicToInput(){
-  const input = document.getElementById('input');
   let value = micBaseText;
   const spoken = micFinalTranscript + micInterimTranscript;
   if(spoken){
     if(value && !value.endsWith(' ')) value += ' ';
     value += spoken;
   }
-  input.value = value;
+  inputEl.value = value;
   autoResizeInput();
+  updateLiveTranscript();
 }
 
 function finishMicRecording(){
@@ -1114,6 +1210,8 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 if(SpeechRecognition){
   const recognition = new SpeechRecognition();
   recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  recognition.lang = navigator.language || 'en-US';
   if(IS_SAFARI) micUseContinuous = false;
 
   function applyMicContinuousMode(){
@@ -1229,7 +1327,7 @@ if(SpeechRecognition){
         micFinalTranscript += transcript;
         gotFinal = true;
       } else {
-        micInterimTranscript = transcript;
+        micInterimTranscript += transcript;
       }
     }
     syncMicToInput();
@@ -1285,7 +1383,7 @@ if(SpeechRecognition){
     micManualStop = false;
     micHadError = false;
     micNetworkRetryCount = 0;
-    micBaseText = document.getElementById('input').value;
+    micBaseText = inputEl.value;
     micFinalTranscript = '';
     micInterimTranscript = '';
     if(!startMicRecognition()){
