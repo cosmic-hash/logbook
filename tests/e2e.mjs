@@ -143,17 +143,19 @@ async function testIndexHtml() {
   assert(html.includes("board-scroll"), "should have horizontal board");
   assert(html.includes("sticky-note"), "should have sticky notes");
   assert(html.includes("mcpTokenBtn"), "should have MCP token button");
-  assert(html.includes("retryMicAfterNetworkError"), "should have mic network retry logic");
-  assert(html.includes("MIC_NETWORK_RETRY_MAX"), "should have mic network retry config");
-  assert(html.includes("browser's cloud service"), "should have improved mic network error message");
-  assert(html.includes("stopMicRecording"), "should have mic manual stop helper");
-  assert(html.includes("requestMicStreamFromGesture"), "should request mic via getUserMedia in click handler");
+  assert(html.includes("createRecognition"), "should create new SpeechRecognition per session");
+  assert(html.includes("startListening"), "should have startListening helper");
+  assert(html.includes("stopListening"), "should have stopListening helper");
+  assert(html.includes("toggleMic"), "should toggle mic on button click");
+  assert(html.includes("acquireMicStream"), "should request mic via getUserMedia in user gesture");
   assert(html.includes("micSecureContextOk"), "should check secure context for voice");
   assert(html.includes("Click Allow when your browser asks"), "should prompt user to allow mic");
-  assert(html.includes("No speech detected"), "should warn when no speech is captured");
+  assert(html.includes("Can't hear you"), "should warn when no speech is captured after 5s");
   assert(html.includes("Try Chrome, allow mic, use HTTPS"), "should show mic debug hint");
   assert(html.includes("liveTranscript"), "should have live transcript area");
-  assert(html.includes("recognition.interimResults = true"), "should enable interim speech results");
+  assert(html.includes("rec.interimResults = true"), "should enable interim speech results");
+  assert(html.includes("developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition"), "should link MDN SpeechRecognition docs");
+  assert(html.includes("browser's cloud service"), "should have mic network error message");
   console.log("  ✓ index.html loads with new UI");
 }
 
