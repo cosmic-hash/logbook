@@ -1078,13 +1078,16 @@ function finishMicRecording(){
   clearMicRestartTimer();
   micInterimTranscript = '';
   syncMicToInput();
+  const wasRecording = micIsRecording;
   setMicRecording(false);
   micManualStop = false;
   micRecognitionActive = false;
-  if(micFinalTranscript.trim() || micBaseText.trim()){
-    showMicStatus('Got it — review or send', 'success', 2500);
-  } else {
-    showMicStatus('Tap mic to speak', '');
+  if(wasRecording){
+    if(micFinalTranscript.trim() || micBaseText.trim()){
+      showMicStatus('Got it — review or send', 'success', 2500);
+    } else {
+      showMicStatus('Tap mic to speak', '');
+    }
   }
 }
 
@@ -1136,6 +1139,16 @@ if(SpeechRecognition){
       recognition.stop();
     }catch(err){}
     micRecognitionActive = false;
+  }
+
+  function stopMicRecording(){
+    if(!micIsRecording) return;
+    micManualStop = true;
+    clearMicRestartTimer();
+    micRecognitionActive = false;
+    try{ recognition.abort(); }catch(err){}
+    try{ recognition.stop(); }catch(err){}
+    finishMicRecording();
   }
 
   function handleMicFatalError(error){
@@ -1221,8 +1234,7 @@ if(SpeechRecognition){
     }
     syncMicToInput();
     if(!micUseContinuous && gotFinal && micIsRecording && !micManualStop){
-      micManualStop = true;
-      safeRecognitionStop();
+      stopMicRecording();
     }
   };
 
@@ -1267,8 +1279,7 @@ if(SpeechRecognition){
 
   micBtn.addEventListener('click', () => {
     if(micIsRecording){
-      micManualStop = true;
-      safeRecognitionStop();
+      stopMicRecording();
       return;
     }
     micManualStop = false;
