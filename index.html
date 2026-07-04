@@ -25,6 +25,7 @@
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
+  html{overflow-x:hidden;}
   body{
     background:
       repeating-linear-gradient(to bottom, transparent 0px, transparent 34px, var(--paper-line) 35px),
@@ -32,6 +33,8 @@
     color:var(--ink);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     min-height:100vh;
+    overflow-x:hidden;
+    -webkit-text-size-adjust:100%;
   }
   .page{ width:100%; position:relative; padding:28px 20px 150px 48px; min-height:100vh; display:none; }
   .margin-rule{ position:absolute; top:0; bottom:0; left:32px; width:2px; background:var(--margin-red); opacity:0.55; }
@@ -51,7 +54,8 @@
   .board-scroll{
     display:flex; gap:14px; overflow-x:auto; overflow-y:visible;
     padding:8px 8px 20px 8px; scroll-snap-type:x mandatory;
-    -webkit-overflow-scrolling:touch;
+    scroll-padding-inline:8px; overscroll-behavior-x:contain;
+    -webkit-overflow-scrolling:touch; touch-action:pan-x;
     scrollbar-width:thin; scrollbar-color:var(--card-border) transparent;
   }
   .board-scroll::-webkit-scrollbar{ height:8px; }
@@ -126,23 +130,90 @@
   .composer{
     position:fixed; bottom:0; left:0; right:0;
     display:flex; justify-content:center;
-    background:linear-gradient(to top, var(--paper) 65%, transparent);
-    padding:16px 0 20px 0; z-index:10;
+    background:linear-gradient(to top, var(--paper) 72%, rgba(246,241,231,0.85) 88%, transparent);
+    padding:12px 0 calc(12px + env(safe-area-inset-bottom, 0px)) 0;
+    z-index:10;
   }
-  .composer-inner{ width:100%; max-width:900px; padding:0 20px 0 48px; display:flex; flex-direction:column; gap:6px; }
-  .composer-row{ display:flex; gap:8px; }
-  textarea{
-    flex:1; resize:none; border:1px solid var(--card-border); border-radius:6px;
-    background:var(--card); padding:10px 12px; font-size:14px; font-family:inherit;
-    color:var(--ink); min-height:44px; max-height:140px;
+  .composer-inner{
+    width:100%; max-width:900px; padding:0 16px 0 48px;
+    display:flex; flex-direction:column; gap:6px;
   }
-  textarea:focus{outline:2px solid var(--margin-red); outline-offset:1px;}
-  button.send, button.mic{ border:none; border-radius:6px; font-size:14px; cursor:pointer; }
-  button.send{ background:var(--ink); color:var(--paper); padding:0 18px; }
-  button.mic{ background:var(--card); border:1px solid var(--card-border); width:44px; }
-  button.mic.recording{ background:var(--red); color:white; }
-  button.send:disabled, button.mic:disabled{opacity:0.5; cursor:default;}
-  .status{ font-size:11.5px; color:var(--ink-soft); font-family: ui-monospace, monospace; height:16px; margin-top:2px; }
+  .composer-bar{
+    display:flex; align-items:flex-end; gap:8px;
+    background:var(--card);
+    border:1px solid var(--card-border);
+    border-radius:22px;
+    padding:6px 6px 6px 6px;
+    box-shadow: 0 4px 20px rgba(38,34,32,0.08), 0 1px 3px rgba(38,34,32,0.06);
+    transition:box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .composer-bar:focus-within{
+    border-color:rgba(194,86,75,0.35);
+    box-shadow: 0 4px 24px rgba(38,34,32,0.1), 0 0 0 3px rgba(194,86,75,0.12);
+  }
+  .composer-input-wrap{
+    flex:1; min-width:0; display:flex; align-items:flex-end;
+    background:var(--paper); border-radius:16px;
+    border:1px solid transparent;
+    transition:border-color 0.2s ease, background 0.2s ease;
+  }
+  .composer-bar:focus-within .composer-input-wrap{
+    background:#FFFDF9;
+    border-color:rgba(194,86,75,0.15);
+  }
+  #input{
+    flex:1; min-width:0; resize:none; border:none; background:transparent;
+    padding:11px 4px 11px 14px; font-size:15px; font-family:inherit;
+    color:var(--ink); line-height:1.4;
+    min-height:44px; max-height:140px;
+    outline:none;
+  }
+  #input::placeholder{ color:#A39E92; opacity:1; }
+  button.mic{
+    flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    width:44px; height:44px; min-width:44px; min-height:44px;
+    margin:2px 2px 2px 0; padding:0;
+    border:none; border-radius:50%; background:transparent;
+    color:var(--ink-soft); cursor:pointer;
+    transition:background 0.15s ease, color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+  }
+  button.mic:hover:not(:disabled){
+    background:rgba(38,34,32,0.06); color:var(--ink);
+  }
+  button.mic:active:not(:disabled){ transform:scale(0.94); }
+  button.mic svg{ width:20px; height:20px; pointer-events:none; }
+  button.mic.recording{
+    background:var(--red); color:white;
+    animation:mic-pulse 1.4s ease-in-out infinite;
+  }
+  button.mic.recording:hover{ background:var(--red); color:white; }
+  @keyframes mic-pulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(181,83,60,0.45); }
+    50%{ box-shadow:0 0 0 8px rgba(181,83,60,0); }
+  }
+  button.mic:disabled{ opacity:0.4; cursor:default; }
+  button.send{
+    flex-shrink:0; display:flex; align-items:center; justify-content:center; gap:6px;
+    min-width:44px; min-height:44px; height:44px;
+    padding:0 18px; margin:0;
+    border:none; border-radius:16px;
+    background:var(--ink); color:var(--paper);
+    font-size:14px; font-weight:600; letter-spacing:0.02em;
+    cursor:pointer;
+    transition:background 0.15s ease, transform 0.12s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+    box-shadow:0 2px 6px rgba(38,34,32,0.18);
+  }
+  button.send:hover:not(:disabled){
+    background:#3A3532;
+    box-shadow:0 3px 10px rgba(38,34,32,0.22);
+  }
+  button.send:active:not(:disabled){ transform:scale(0.96); }
+  button.send:disabled{ opacity:0.45; cursor:default; box-shadow:none; }
+  button.send svg{ width:16px; height:16px; flex-shrink:0; }
+  .status{
+    font-size:11.5px; color:var(--ink-soft); font-family: ui-monospace, monospace;
+    height:16px; margin:0 4px; padding-left:4px;
+  }
 
   .overlay{ position:fixed; inset:0; background:rgba(38,34,32,0.35); display:none; align-items:center; justify-content:center; z-index:20; padding:16px; }
   .overlay.open{ display:flex; }
@@ -216,12 +287,30 @@
   }
   .toast.show{ opacity:1; pointer-events:auto; }
 
+  @media (max-width:1024px){
+    .composer-inner{ padding:0 16px 0 40px; }
+  }
+  @media (max-width:768px){
+    .page{ padding:22px 14px calc(130px + env(safe-area-inset-bottom, 0px)) 38px; }
+    .margin-rule{ left:24px; }
+    .composer-inner{ padding:0 14px 0 38px; }
+    header h1{ font-size:26px; }
+    .board-column{ flex:0 0 74vw; }
+  }
   @media (max-width:600px){
-    .page{ padding:20px 12px 140px 36px; }
+    .page{ padding:20px 12px calc(128px + env(safe-area-inset-bottom, 0px)) 36px; }
     .margin-rule{ left:22px; }
-    .composer-inner{ padding:0 12px 0 36px; }
+    .composer-inner{ padding:0 12px 0 32px; }
     header h1{ font-size:24px; }
     .board-column{ flex:0 0 72vw; }
+    #input{ font-size:16px; padding-left:12px; }
+    button.send{ padding:0 14px; border-radius:14px; }
+  }
+  @media (max-width:380px){
+    .composer-inner{ padding:0 10px 0 28px; }
+    .composer-bar{ border-radius:20px; padding:5px; }
+    button.send .send-label{ display:none; }
+    button.send{ padding:0; width:44px; border-radius:50%; }
   }
 </style>
 </head>
@@ -299,10 +388,23 @@
 
 <div class="composer" id="composer" style="display:none;">
   <div class="composer-inner">
-    <div class="composer-row">
-      <textarea id="input" placeholder="e.g. paste an email, or say 'push the invoice task to Friday'"></textarea>
-      <button class="mic" id="micBtn" title="Talk instead">🎤</button>
-      <button class="send" id="sendBtn">Add</button>
+    <div class="composer-bar">
+      <div class="composer-input-wrap">
+        <textarea id="input" rows="1" placeholder="Paste, type, or talk…"></textarea>
+        <button class="mic" id="micBtn" type="button" title="Talk instead" aria-label="Voice input">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" x2="12" y1="19" y2="22"/>
+          </svg>
+        </button>
+      </div>
+      <button class="send" id="sendBtn" type="button" aria-label="Add entry">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+          <line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/>
+        </svg>
+        <span class="send-label">Add</span>
+      </button>
     </div>
     <div class="status" id="status"></div>
   </div>
@@ -819,6 +921,7 @@ async function handleSend(){
 
   pushJournal('user', text);
   input.value = '';
+  autoResizeInput();
 
   try{
     const res = await fetch('/api/chat', {
@@ -840,7 +943,14 @@ async function handleSend(){
   btn.disabled = false;
 }
 
+function autoResizeInput(){
+  const el = document.getElementById('input');
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+
 document.getElementById('sendBtn').addEventListener('click', handleSend);
+document.getElementById('input').addEventListener('input', autoResizeInput);
 document.getElementById('input').addEventListener('keydown', (e) => {
   if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); }
 });
@@ -854,6 +964,7 @@ if(SpeechRecognition){
   recognition.interimResults = false;
   recognition.onresult = (e) => {
     document.getElementById('input').value = e.results[0][0].transcript;
+    autoResizeInput();
     micBtn.classList.remove('recording');
   };
   recognition.onerror = () => micBtn.classList.remove('recording');
