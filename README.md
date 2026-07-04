@@ -42,17 +42,86 @@ You (type / paste / speak)
         ↓
    Task extraction + deadline parsing + categorization
         ↓
-   Grouped task board (Events · Work · Personal · School)
+   Horizontal sticky-note board (Events · Work · Personal · School · Inbox)
         ↓
    Persistent storage (Supabase)
 ```
 
 1. **Input anything** — natural language, pasted emails, Slack threads, voice
 2. **AI extracts** — titles, dates, and categories from unstructured text
-3. **Tasks appear grouped** — hackathons under Events, laundry under Personal, homework under School
-4. **You stay in control** — edit notes, mark done, delete, or add more via chat
+3. **Tasks appear as sticky notes** — grouped in horizontal scrollable columns by category
+4. **You stay in control** — click a note to edit, mark done, or delete
 
 If AI is unavailable, a local parser keeps the app working — no dead ends.
+
+---
+
+## New in v1.1
+
+### Sticky-note board
+
+Tasks render as colored sticky notes on a **horizontal Kanban-style board**. Scroll sideways on mobile to browse categories. Each category has its own column with slight rotation and shadow for a tactile feel.
+
+| Category | Note color |
+|----------|------------|
+| Events | Yellow |
+| Work | Blue |
+| Personal | Green |
+| School | Purple |
+| Inbox | Neutral |
+
+### Ephemeral activity log
+
+Journal entries appear briefly after you send a message, then **fade away** after ~45 seconds (configurable). Full history is still saved to localStorage; only the on-screen display is ephemeral.
+
+```js
+// In browser console — set fade duration (15–120 seconds)
+localStorage.setItem('logbook_log_fade_sec', '60')
+```
+
+### MCP server
+
+Logbook is available as an **MCP (Model Context Protocol) server** so AI assistants can manage your tasks directly.
+
+**Tools:** `get_categories`, `list_tasks`, `add_task`, `complete_task`, `delete_task`
+
+**Connect in Cursor** — add to `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "logbook": {
+      "command": "node",
+      "args": ["/absolute/path/to/logbook/mcp-server/index.js"],
+      "env": {
+        "LOGBOOK_EMAIL": "you@example.com"
+      }
+    }
+  }
+}
+```
+
+**Connect in Claude Desktop** — add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "logbook": {
+      "command": "node",
+      "args": ["/absolute/path/to/logbook/mcp-server/index.js"],
+      "env": { "LOGBOOK_EMAIL": "you@example.com" }
+    }
+  }
+}
+```
+
+Run manually: `npm run mcp`
+
+The MCP server reads/writes the local `.dev-kv.json` store (same as `npm run dev`). Create an account via the web UI first so tasks exist for your email.
+
+### Gmail integration (scaffold)
+
+OAuth flow and sync endpoints are scaffolded. See [docs/gmail-integration.md](docs/gmail-integration.md) for architecture, setup steps, and what's left to implement.
 
 ---
 
@@ -68,7 +137,7 @@ Logbook organizes your life into five groups:
 | **School** | Homework, exams, assignments, study sessions |
 | **Inbox** | Anything that doesn't fit elsewhere |
 
-Each group is its own section on the board — personal chores in one place, academic work in another, professional tasks separate from social events.
+Each group is its own **horizontal column** on the board — scroll sideways to browse.
 
 ---
 
@@ -83,46 +152,22 @@ Logbook surfaces what needs attention **before you forget** — no email setup r
 | **Due tomorrow** | Listed under Reminders |
 | **Browser alerts** | Optional — click "Enable alerts" for system notifications |
 
-Reminders run while you're logged in and recheck every 5 minutes. Tasks with deadlines automatically appear — no extra input needed.
-
-**Future:** email reminders and Gmail-triggered alerts (see roadmap below).
+Reminders run while you're logged in and recheck every 5 minutes.
 
 ---
 
 ## Key features
 
+- **Sticky-note board** — horizontal scrollable columns per category
 - **Conversational input** — type, paste, or use voice (Chrome/Safari)
 - **AI-powered extraction** — EdgeOne Makers Models (`@makers/deepseek-v4-flash`)
-- **Smart categorization** — tasks sorted into Events, Work, Personal, School
+- **Smart categorization** — Events, Work, Personal, School, Inbox
 - **Deadline awareness** — parses "July 3rd", "tomorrow", "next Friday"
-- **In-page reminders** — banner + reminder list for overdue, today, and tomorrow; optional browser alerts
-- **Urgency indicators** — color-coded dots for overdue, due soon, on track
+- **Ephemeral activity log** — entries fade after configurable timeout
+- **Task detail modal** — edit notes, mark done, delete, see category/deadline
+- **MCP server** — manage tasks from Cursor, Claude, or any MCP client
 - **Real accounts** — sign up, sign in, tasks persist across sessions
-- **Activity log** — see what you said and what the agent did
-- **Edge-native** — deployed on Tencent EdgeOne, runs at the edge
-
----
-
-## Roadmap: Gmail & beyond
-
-Logbook is built as an **extensible AI agent**, not a closed todo app.
-
-**Next: Gmail integration**
-
-- Connect your inbox via OAuth
-- Agent reads incoming emails and surfaces buried action items
-- Auto-categorize: work emails → Work, school notices → School, event invites → Events
-- One dashboard for everything life throws at you — messages in, tasks out
-
-**Future extensions**
-
-- Email reminders (scheduled before deadlines)
-- Slack / Teams thread ingestion
-- Calendar sync (Google Calendar, Outlook)
-- Daily briefing digest
-- Shared lists for teams or households
-
-The architecture is simple: **input source → AI agent → categorized task store**. Gmail is the next input source.
+- **Edge-native** — deployed on Tencent EdgeOne
 
 ---
 
@@ -130,10 +175,11 @@ The architecture is simple: **input source → AI agent → categorized task sto
 
 | Layer | Technology |
 |-------|-------------|
-| Frontend | Single-page HTML/CSS/JS (notebook-style UI) |
+| Frontend | Single-page HTML/CSS/JS (notebook + sticky notes UI) |
 | Backend | EdgeOne Makers Cloud Functions |
 | AI | EdgeOne Makers Models — `@makers/deepseek-v4-flash` |
 | Storage | Supabase (auth sessions + task data) |
+| MCP | `@modelcontextprotocol/sdk` (stdio transport) |
 | Hosting | Tencent EdgeOne Pages |
 | Voice | Web Speech API |
 
@@ -142,6 +188,7 @@ The architecture is simple: **input source → AI agent → categorized task sto
 ## Quick start (local)
 
 ```bash
+npm install
 npm run dev
 ```
 
@@ -149,7 +196,7 @@ Open **http://localhost:8088**
 
 1. Create an account (email + password, min 8 chars)
 2. Type or paste a task — e.g. *"planning to attend a tencent mini hackathon on july 3rd"*
-3. Tasks appear grouped by category; click to edit notes, dot to mark done
+3. Tasks appear as sticky notes in horizontal columns; click to edit notes, dot to mark done
 
 For AI extraction locally, copy `.env.example` to `.env` and add your keys:
 
@@ -157,6 +204,20 @@ For AI extraction locally, copy `.env.example` to `.env` and add your keys:
 SUPABASE_URL=...
 SUPABASE_SERVICE_KEY=...
 MAKERS_MODELS_KEY=...   # optional — local parser works without it
+```
+
+### Run tests
+
+```bash
+npm test
+```
+
+E2E tests start a dev server on port 8099, then verify signup, chat/add task, categorization, persistence, and UI markup.
+
+### Run MCP server
+
+```bash
+LOGBOOK_EMAIL=you@example.com npm run mcp
 ```
 
 ---
@@ -184,20 +245,21 @@ edgeone makers deploy . -n logbook
 ## Demo script (5 min)
 
 1. Sign up → show auth works
-2. *"I'm going to mini hackathon on July 3rd at Agent Forge SF"* → **Events**
-3. *"Do laundry tomorrow"* → **Personal**
-4. *"Submit CS homework by Friday"* → **School**
-5. Show **Reminders** banner (task due tomorrow appears automatically)
-6. Click **Enable alerts** → optional browser notification
-7. Click task → add notes → mark done
-8. Sign out → sign in → tasks persist
+2. *"I'm going to mini hackathon on July 3rd at Agent Forge SF"* → **Events** column (yellow note)
+3. *"Do laundry tomorrow"* → **Personal** column (green note)
+4. *"Submit CS homework by Friday"* → **School** column (purple note)
+5. Scroll the horizontal board on mobile
+6. Show **Reminders** banner (task due tomorrow appears automatically)
+7. Click a sticky note → add notes → mark done
+8. Watch log entry fade after ~45 seconds
+9. Sign out → sign in → tasks persist
 
 ---
 
 ## Project layout
 
 ```
-index.html                      → frontend
+index.html                      → frontend (sticky-note board UI)
 cloud-functions/api/
   _lib.js                       → auth + storage helpers
   _store.js                     → Supabase / KV storage adapter
@@ -208,6 +270,13 @@ cloud-functions/api/
   me.js                         → GET  /api/me
   tasks.js                      → GET/POST /api/tasks
   chat.js                       → POST /api/chat (AI agent)
+  gmail.js                      → Gmail OAuth + sync scaffold
+mcp-server/
+  index.js                      → MCP server (stdio)
+docs/
+  gmail-integration.md          → Gmail architecture + setup
+tests/
+  e2e.mjs                       → end-to-end API tests
 dev-server.mjs                  → local dev server
 supabase.sql                    → database setup
 ```
@@ -216,4 +285,4 @@ supabase.sql                    → database setup
 
 ## One-liner for slides
 
-> **Logbook** — paste anything, talk, or type. An AI agent turns your messy input into categorized, dated tasks with in-page reminders. Personal task management that meets you where you already write — extensible to Gmail next.
+> **Logbook** — paste anything, talk, or type. An AI agent turns your messy input into categorized sticky notes on a horizontal board, with MCP access for your AI tools. Personal task management that meets you where you already write.

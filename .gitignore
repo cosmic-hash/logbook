@@ -1,3 +1,5 @@
 .dev-kv.json
 .env
 logbook-edgeone.zip
+node_modules/
+.DS_Store

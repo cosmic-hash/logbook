@@ -115,6 +115,16 @@ createServer(async (req, res) => {
       return sendWebResponse(res, webRes);
     }
 
+    // Gmail routes share one module — match by path prefix
+    if (url.pathname.startsWith("/api/gmail/")) {
+      const body = await readBody(req);
+      const request = toWebRequest(req, body);
+      const mod = await import(pathToFileURL(join(__dirname, "./cloud-functions/api/gmail.js")).href);
+      const handler = req.method === "GET" ? mod.onRequestGet : mod.onRequestPost;
+      const webRes = await handler({ request, env });
+      return sendWebResponse(res, webRes);
+    }
+
     if (url.pathname === "/" || url.pathname === "/index.html") {
       const html = readFileSync(join(__dirname, "index.html"));
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
