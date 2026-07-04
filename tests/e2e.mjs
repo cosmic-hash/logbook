@@ -147,7 +147,9 @@ async function testIndexHtml() {
   assert(html.includes("MIC_NETWORK_RETRY_MAX"), "should have mic network retry config");
   assert(html.includes("browser's cloud service"), "should have improved mic network error message");
   assert(html.includes("stopMicRecording"), "should have mic manual stop helper");
-  assert(html.includes("ensureMicPermission"), "should prime mic via getUserMedia before recognition");
+  assert(html.includes("requestMicStreamFromGesture"), "should request mic via getUserMedia in click handler");
+  assert(html.includes("micSecureContextOk"), "should check secure context for voice");
+  assert(html.includes("Click Allow when your browser asks"), "should prompt user to allow mic");
   assert(html.includes("No speech detected"), "should warn when no speech is captured");
   assert(html.includes("Try Chrome, allow mic, use HTTPS"), "should show mic debug hint");
   assert(html.includes("liveTranscript"), "should have live transcript area");

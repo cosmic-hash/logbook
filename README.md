@@ -180,7 +180,7 @@ Reminders run while you're logged in and recheck every 5 minutes.
 ## Key features
 
 - **Sticky-note board** — horizontal scrollable columns per category
-- **Conversational input** — type, paste, or use voice (Chrome/Safari)
+- **Conversational input** — type, paste, or use voice (Chrome recommended; HTTPS required)
 - **AI-powered extraction** — EdgeOne Makers Models (`@makers/deepseek-v4-flash`)
 - **Smart categorization** — Events, Work, Personal, School, Inbox
 - **Deadline awareness** — parses "July 3rd", "tomorrow", "next Friday"
@@ -202,7 +202,9 @@ Reminders run while you're logged in and recheck every 5 minutes.
 | Storage | Supabase (auth sessions + task data) |
 | MCP | `@modelcontextprotocol/sdk` (stdio + Streamable HTTP) |
 | Hosting | Tencent EdgeOne Pages |
-| Voice | Web Speech API |
+| Voice | Web Speech API (Chrome recommended; requires HTTPS + mic permission) |
+
+**Voice input:** Open Logbook over **HTTPS** (or `localhost`), use **Chrome** for best results, and click **Allow** when the browser asks for microphone access. iOS Safari has limited speech recognition support.
 
 ---
 

@@ -1072,6 +1072,44 @@ const MIC_NETWORK_RETRY_DELAY = 500;
 const MIC_NO_SPEECH_MS = 4000;
 const MIC_DEBUG_HINT = ' Try Chrome, allow mic, use HTTPS.';
 const IS_SAFARI = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+function micSecureContextOk(){
+  return window.isSecureContext
+    || location.protocol === 'https:'
+    || location.hostname === 'localhost'
+    || location.hostname === '127.0.0.1';
+}
+
+function getSpeechRecognitionCtor(){
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function getMicUnavailableReason(){
+  if(!micSecureContextOk()){
+    return 'Voice requires HTTPS (or localhost). Open Logbook over a secure connection.';
+  }
+  if(!navigator.mediaDevices?.getUserMedia){
+    return 'Microphone API unavailable — use Chrome over HTTPS and allow mic access.';
+  }
+  if(!getSpeechRecognitionCtor()){
+    if(IS_IOS){
+      return 'Speech recognition is limited on iOS — try Chrome on desktop for voice input.';
+    }
+    return 'Voice input not supported in this browser — try Chrome.' + MIC_DEBUG_HINT;
+  }
+  return null;
+}
+
+async function queryMicPermissionState(){
+  if(!navigator.permissions?.query) return 'unknown';
+  try{
+    const status = await navigator.permissions.query({ name: 'microphone' });
+    return status.state;
+  }catch{
+    return 'unknown';
+  }
+}
 
 function micSpeechLang(){
   const lang = (navigator.language || '').trim();
@@ -1220,16 +1258,33 @@ function releaseMicStream(){
   }
 }
 
-async function ensureMicPermission(){
-  if(!navigator.mediaDevices?.getUserMedia) return true;
-  try{
-    releaseMicStream();
-    micMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    return true;
-  }catch(err){
-    releaseMicStream();
-    return false;
+function requestMicStreamFromGesture(){
+  if(!navigator.mediaDevices?.getUserMedia){
+    return Promise.reject(Object.assign(new Error('no-media-devices'), { name: 'NotSupportedError' }));
   }
+  releaseMicStream();
+  return navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    micMediaStream = stream;
+    return stream;
+  });
+}
+
+async function handleMicPermissionError(err){
+  releaseMicStream();
+  setMicRecording(false);
+  micRecognitionActive = false;
+  let msg = 'Microphone blocked — click Allow when prompted, or enable mic in browser settings.';
+  if(err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError'){
+    const state = await queryMicPermissionState();
+    msg = state === 'denied'
+      ? 'Microphone denied — open browser site settings and set Microphone to Allow.'
+      : 'Click Allow when your browser asks for microphone access, or check site settings.';
+  } else if(err?.name === 'NotFoundError'){
+    msg = 'No microphone found. Check your device.' + MIC_DEBUG_HINT;
+  } else if(err?.name === 'NotSupportedError' || err?.message === 'no-media-devices'){
+    msg = 'Microphone API unavailable — use Chrome over HTTPS.' + MIC_DEBUG_HINT;
+  }
+  showMicStatus(msg, 'error', 6000);
 }
 
 function armMicNoSpeechTimer(){
@@ -1247,7 +1302,7 @@ function armMicNoSpeechTimer(){
 
 function micErrorMessage(error){
   if(error === 'not-allowed' || error === 'service-not-allowed'){
-    return 'Microphone blocked — allow access in browser settings.' + MIC_DEBUG_HINT;
+    return 'Microphone blocked — click Allow when prompted, or open browser site settings and set Microphone to Allow.' + MIC_DEBUG_HINT;
   }
   if(error === 'audio-capture') return 'No microphone found. Check your device.' + MIC_DEBUG_HINT;
   if(error === 'network'){
@@ -1257,7 +1312,7 @@ function micErrorMessage(error){
   return 'Microphone error — try again.' + MIC_DEBUG_HINT;
 }
 
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const SpeechRecognition = getSpeechRecognitionCtor();
 if(SpeechRecognition){
   const recognition = new SpeechRecognition();
   recognition.interimResults = true;
@@ -1344,19 +1399,11 @@ if(SpeechRecognition){
     }, 250);
   }
 
-  async function startMicRecognition(){
-    if(micIsRecording || micRecognitionActive) return micIsRecording;
+  function beginMicRecognition(){
+    if(micIsRecording || micRecognitionActive) return true;
     micHadError = false;
     micNetworkRetryCount = 0;
     recognition.lang = micSpeechLang();
-    if(!(await ensureMicPermission())){
-      showMicStatus(
-        'Microphone blocked — allow access in browser settings.' + MIC_DEBUG_HINT,
-        'error',
-        5000
-      );
-      return false;
-    }
     applyMicContinuousMode();
     if(safeRecognitionStart()){
       setMicRecording(true);
@@ -1455,9 +1502,14 @@ if(SpeechRecognition){
     scheduleMicRestart();
   };
 
-  micBtn.addEventListener('click', async () => {
+  micBtn.addEventListener('click', () => {
     if(micIsRecording){
       stopMicRecording();
+      return;
+    }
+    const unavailable = getMicUnavailableReason();
+    if(unavailable){
+      showMicStatus(unavailable, 'error', 6000);
       return;
     }
     micManualStop = false;
@@ -1466,25 +1518,39 @@ if(SpeechRecognition){
     micBaseText = inputEl.value;
     micFinalTranscript = '';
     micInterimTranscript = '';
-    if(!(await startMicRecognition())){
-      setMicRecording(false);
-      micRecognitionActive = false;
-      releaseMicStream();
-      showMicStatus(
-        IS_SAFARI
-          ? 'Voice input unavailable — try Chrome or tap mic after each phrase.' + MIC_DEBUG_HINT
-          : 'Could not start microphone.' + MIC_DEBUG_HINT,
-        'error',
-        5000
-      );
-    }
+    showMicStatus('Click Allow when your browser asks for microphone access.', 'recording');
+    requestMicStreamFromGesture()
+      .then(() => {
+        if(!beginMicRecognition()){
+          releaseMicStream();
+          setMicRecording(false);
+          micRecognitionActive = false;
+          showMicStatus(
+            IS_SAFARI
+              ? 'Voice input unavailable — try Chrome or tap mic after each phrase.' + MIC_DEBUG_HINT
+              : 'Could not start microphone.' + MIC_DEBUG_HINT,
+            'error',
+            5000
+          );
+        }
+      })
+      .catch(err => handleMicPermissionError(err));
   });
-  setComposerStatus('Tap mic to speak', '');
+  const micInitReason = getMicUnavailableReason();
+  if(micInitReason){
+    micBtn.disabled = true;
+    micBtn.title = micInitReason;
+    micBtn.setAttribute('aria-label', micInitReason);
+    setComposerStatus(micInitReason, 'error');
+  } else {
+    setComposerStatus('Tap mic to speak', '');
+  }
 } else {
+  const unavailable = getMicUnavailableReason();
   micBtn.disabled = true;
-  micBtn.title = 'Voice input not supported in this browser';
-  micBtn.setAttribute('aria-label', 'Voice input not supported');
-  setComposerStatus('Voice input not supported in this browser', 'error');
+  micBtn.title = unavailable || 'Voice input not supported in this browser';
+  micBtn.setAttribute('aria-label', unavailable || 'Voice input not supported');
+  setComposerStatus(unavailable || 'Voice input not supported in this browser', 'error');
 }
 
 checkSession();
