@@ -1016,6 +1016,10 @@ const composerBar = document.querySelector('.composer-bar');
 const MIC_ICON_IDLE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>`;
 const MIC_ICON_RECORDING = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>`;
 let micIsRecording = false;
+let micManualStop = false;
+let micBaseText = '';
+let micFinalTranscript = '';
+let micInterimTranscript = '';
 let micStatusTimer = null;
 
 function setComposerStatus(msg, type){
@@ -1039,8 +1043,8 @@ function setMicRecording(active){
   micIsRecording = active;
   micBtn.classList.toggle('recording', active);
   micBtn.setAttribute('aria-pressed', String(active));
-  micBtn.setAttribute('aria-label', active ? 'Stop listening' : 'Tap to speak');
-  micBtn.title = active ? 'Stop listening' : 'Tap to speak';
+  micBtn.setAttribute('aria-label', active ? 'Tap to stop' : 'Tap to speak');
+  micBtn.title = active ? 'Tap to stop' : 'Tap to speak';
   micBtn.innerHTML = active ? MIC_ICON_RECORDING : MIC_ICON_IDLE;
   if(recordingBadge) recordingBadge.classList.toggle('visible', active);
   if(composerBar) composerBar.classList.toggle('is-recording', active);
@@ -1050,20 +1054,54 @@ function setMicRecording(active){
   }
 }
 
+function syncMicToInput(){
+  const input = document.getElementById('input');
+  let value = micBaseText;
+  const spoken = micFinalTranscript + micInterimTranscript;
+  if(spoken){
+    if(value && !value.endsWith(' ')) value += ' ';
+    value += spoken;
+  }
+  input.value = value;
+  autoResizeInput();
+}
+
+function finishMicRecording(){
+  micInterimTranscript = '';
+  syncMicToInput();
+  setMicRecording(false);
+  micManualStop = false;
+  if(micFinalTranscript.trim() || micBaseText.trim()){
+    showMicStatus('Got it — review or send', 'success', 2500);
+  } else {
+    showMicStatus('Tap mic to speak', '');
+  }
+}
+
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 if(SpeechRecognition){
   const recognition = new SpeechRecognition();
-  recognition.continuous = false;
-  recognition.interimResults = false;
+  recognition.continuous = true;
+  recognition.interimResults = true;
   recognition.onresult = (e) => {
-    document.getElementById('input').value = e.results[0][0].transcript;
-    autoResizeInput();
-    setMicRecording(false);
-    showMicStatus('Got it — review or send', 'success', 2500);
+    micInterimTranscript = '';
+    for(let i = e.resultIndex; i < e.results.length; i++){
+      const transcript = e.results[i][0].transcript;
+      if(e.results[i].isFinal){
+        micFinalTranscript += transcript;
+      } else {
+        micInterimTranscript = transcript;
+      }
+    }
+    syncMicToInput();
   };
   recognition.onerror = (e) => {
-    setMicRecording(false);
     if(e.error === 'aborted') return;
+    if(e.error === 'no-speech' && micIsRecording && !micManualStop) return;
+    setMicRecording(false);
+    micManualStop = false;
+    micInterimTranscript = '';
+    syncMicToInput();
     let msg = 'Microphone error — try again.';
     if(e.error === 'not-allowed') msg = 'Microphone access denied. Allow mic in browser settings.';
     else if(e.error === 'no-speech') msg = 'No speech detected — tap mic and try again.';
@@ -1071,13 +1109,28 @@ if(SpeechRecognition){
     showMicStatus(msg, 'error', 5000);
   };
   recognition.onend = () => {
-    if(micIsRecording) setMicRecording(false);
+    if(micManualStop){
+      finishMicRecording();
+      return;
+    }
+    if(!micIsRecording) return;
+    try{
+      recognition.start();
+    }catch(err){
+      finishMicRecording();
+      showMicStatus('Could not continue listening.', 'error', 5000);
+    }
   };
   micBtn.addEventListener('click', () => {
     if(micIsRecording){
+      micManualStop = true;
       recognition.stop();
       return;
     }
+    micManualStop = false;
+    micBaseText = document.getElementById('input').value;
+    micFinalTranscript = '';
+    micInterimTranscript = '';
     try{
       setMicRecording(true);
       recognition.start();
