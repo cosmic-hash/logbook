@@ -61,6 +61,33 @@ export async function saveTasks(env, email, tasks) {
   await getStore(env).put(`tasks:${email}`, JSON.stringify(tasks));
 }
 
+/** YYYY-MM-DD for a calendar date in the given IANA timezone (or server-local if omitted). */
+export function localTodayIso(timezone) {
+  if (timezone) {
+    try {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+    } catch {
+      // invalid timezone — fall through
+    }
+  }
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Prefer explicit client `today`, else derive from optional `timezone`. */
+export function resolveToday({ today, timezone } = {}) {
+  if (today && /^\d{4}-\d{2}-\d{2}$/.test(today)) return today;
+  return localTodayIso(timezone);
+}
+
 export function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,

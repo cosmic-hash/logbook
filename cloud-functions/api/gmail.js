@@ -3,7 +3,7 @@
 // GET  /api/gmail/callback  -> OAuth redirect handler (stub)
 // POST /api/gmail/sync      -> fetch unread emails, extract tasks (stub)
 
-import { getSessionEmail, getTasks, saveTasks, json } from "./_lib.js";
+import { getSessionEmail, getTasks, saveTasks, json, resolveToday } from "./_lib.js";
 import { getStore } from "./_store.js";
 import { localExtract } from "./_extract.js";
 
@@ -119,7 +119,7 @@ export async function onRequestGet(context) {
 }
 
 async function handleSync(context, email) {
-  const { env } = context;
+  const { request, env } = context;
   const raw = await getStore(env).get(`gmail:${email}`);
   if (!raw) {
     return json({ error: "Gmail not connected", hint: "POST /api/gmail/auth-url first" }, 400);
@@ -127,7 +127,13 @@ async function handleSync(context, email) {
 
   // Scaffold: in production, use googleapis to fetch unread messages and extract tasks
   const tasks = await getTasks(env, email);
-  const today = new Date().toISOString().slice(0, 10);
+  let syncBody = {};
+  try {
+    syncBody = await request.json();
+  } catch {
+    // no body — use server-local today
+  }
+  const today = resolveToday(syncBody);
 
   // Placeholder sync result — real implementation fetches emails via Gmail API
   const sampleEmail = {

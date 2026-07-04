@@ -1,6 +1,6 @@
 // Shared MCP tool definitions + handlers (Supabase via _lib.js).
 import { localExtract } from "./_extract.js";
-import { getTasks, saveTasks } from "./_lib.js";
+import { getTasks, saveTasks, resolveToday } from "./_lib.js";
 
 export const CATEGORIES = ["Events", "Work", "Personal", "School", "Inbox"];
 
@@ -28,6 +28,8 @@ export const TOOLS = [
       type: "object",
       properties: {
         message: { type: "string", description: "Natural language task description" },
+        timezone: { type: "string", description: "IANA timezone for date parsing (e.g. America/Los_Angeles)" },
+        today: { type: "string", description: "Client calendar today as YYYY-MM-DD" },
       },
       required: ["message"],
     },
@@ -79,7 +81,7 @@ export async function handleTool(env, email, name, args = {}) {
     case "add_task": {
       if (!args.message) throw new Error("message is required");
       const tasks = await getTasks(env, email);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = resolveToday({ today: args.today, timezone: args.timezone });
       const result = localExtract(args.message, tasks, today);
       await saveTasks(env, email, result.tasks);
       return { reply: result.reply, tasks: result.tasks };

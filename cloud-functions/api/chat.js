@@ -1,5 +1,5 @@
 // POST /api/chat  { message } -> { reply, tasks }
-import { getSessionEmail, getTasks, saveTasks, json } from "./_lib.js";
+import { getSessionEmail, getTasks, saveTasks, json, resolveToday } from "./_lib.js";
 import { localExtract } from "./_extract.js";
 
 const CATEGORY_HINTS = [
@@ -23,9 +23,9 @@ export async function onRequestPost(context) {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
-  const { message } = body;
+  const { message, timezone, today: clientToday } = body;
   const tasks = await getTasks(env, email);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = resolveToday({ today: clientToday, timezone });
 
   const aiKey = env.MAKERS_MODELS_KEY || process.env.MAKERS_MODELS_KEY;
   if (!aiKey) {

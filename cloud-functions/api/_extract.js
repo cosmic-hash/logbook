@@ -24,18 +24,22 @@ function toIso(y, m, d) {
 }
 
 function addDays(iso, n) {
-  const d = new Date(iso + "T12:00:00");
-  d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + n);
+  return toIso(dt.getFullYear(), dt.getMonth(), dt.getDate());
+}
+
+function weekdayOf(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).getDay();
 }
 
 function parseWeekday(text, todayIso) {
   const m = text.match(/\b(?:by|on|before|this|next)?\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b/i);
   if (!m) return null;
 
-  const today = new Date(todayIso + "T12:00:00");
   const target = WEEKDAYS[m[1].toLowerCase()];
-  let diff = target - today.getDay();
+  let diff = target - weekdayOf(todayIso);
   const isNext = /\bnext\b/i.test(text);
 
   if (isNext) {
@@ -48,8 +52,7 @@ function parseWeekday(text, todayIso) {
 }
 
 function parseDeadline(text, todayIso) {
-  const today = new Date(todayIso + "T12:00:00");
-  const year = today.getFullYear();
+  const year = +todayIso.slice(0, 4);
 
   const iso = text.match(/\b(\d{4}-\d{2}-\d{2})\b/);
   if (iso) return iso[1];

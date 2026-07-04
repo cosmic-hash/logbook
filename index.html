@@ -592,10 +592,29 @@ document.getElementById('mcpTokenCopyBtn').addEventListener('click', async () =>
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
 
+function userTimezone(){
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+function localTodayIso(){
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function parseLocalDate(dateStr){
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function daysUntil(dateStr){
   if(!dateStr) return null;
-  const d = new Date(dateStr + "T23:59:59");
-  return Math.ceil((d - new Date()) / (1000*60*60*24));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const deadline = parseLocalDate(dateStr);
+  return Math.round((deadline - today) / (1000 * 60 * 60 * 24));
 }
 function urgencyClass(dateStr, done){
   if(done || !dateStr) return "none";
@@ -607,7 +626,7 @@ function urgencyClass(dateStr, done){
 function fmtDate(dateStr){
   if(!dateStr) return "no date";
   const d = daysUntil(dateStr);
-  const nice = new Date(dateStr + "T00:00:00").toLocaleDateString(undefined, {month:"short", day:"numeric"});
+  const nice = parseLocalDate(dateStr).toLocaleDateString(undefined, {month:"short", day:"numeric"});
   if(d === 0) return nice + " · today";
   if(d === 1) return nice + " · tomorrow";
   if(d < 0) return nice + " · " + Math.abs(d) + "d overdue";
@@ -684,7 +703,7 @@ function checkReminderAlerts(){
 
   const list = reminderTasks();
   const notified = loadNotified();
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = localTodayIso();
 
   for(const t of list){
     const key = `${t.id}:${t.deadline}`;
@@ -959,7 +978,11 @@ async function handleSend(){
       ...API,
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ message: text })
+      body: JSON.stringify({
+        message: text,
+        timezone: userTimezone(),
+        today: localTodayIso(),
+      })
     });
     const parsed = await res.json();
     if(res.status === 401){ showAuth(); return; }

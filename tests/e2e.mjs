@@ -95,10 +95,12 @@ async function testMe() {
 }
 
 async function testChatAddTask() {
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const { res, body } = await fetchApi("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: "Do laundry tomorrow" }),
+    body: JSON.stringify({ message: "Do laundry tomorrow", today: todayIso }),
   });
   assert(res.ok, `chat failed: ${JSON.stringify(body)}`);
   assert(Array.isArray(body.tasks), "chat should return tasks array");
@@ -111,10 +113,12 @@ async function testChatAddTask() {
 }
 
 async function testSchoolCategory() {
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const { res, body } = await fetchApi("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: "Submit CS homework by Friday" }),
+    body: JSON.stringify({ message: "Submit CS homework by Friday", today: todayIso }),
   });
   assert(res.ok, `chat school failed: ${JSON.stringify(body)}`);
   const hw = body.tasks.find((t) => /homework|cs/i.test(t.title));
@@ -185,9 +189,11 @@ async function testMcpTools() {
   assert(names.includes("list_tasks"), "should expose list_tasks");
   assert(names.includes("add_task"), "should expose add_task");
 
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const addResult = await client.callTool({
     name: "add_task",
-    arguments: { message: "Book dentist appointment next Friday" },
+    arguments: { message: "Book dentist appointment next Friday", today: todayIso },
   });
   const addText = addResult.content?.[0]?.text || "";
   const addParsed = JSON.parse(addText);
