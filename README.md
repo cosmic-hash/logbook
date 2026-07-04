@@ -85,6 +85,27 @@ Logbook is available as an **MCP (Model Context Protocol) server** so AI assista
 
 **Tools:** `get_categories`, `list_tasks`, `add_task`, `complete_task`, `delete_task`
 
+#### Remote MCP (recommended for production)
+
+1. Sign in at the Logbook web app
+2. Click **MCP token** in the header (or `POST /api/mcp/token` with your session cookie)
+3. Add to `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "logbook": {
+      "url": "https://logbook-dpgi7oj4y204.edgeone.dev/mcp",
+      "headers": { "Authorization": "Bearer YOUR_TOKEN" }
+    }
+  }
+}
+```
+
+The remote endpoint uses your live Supabase task data. Unauthenticated requests return 401.
+
+#### Local stdio MCP (dev)
+
 **Connect in Cursor** — add to `.cursor/mcp.json`:
 
 ```json
@@ -117,7 +138,7 @@ Logbook is available as an **MCP (Model Context Protocol) server** so AI assista
 
 Run manually: `npm run mcp`
 
-The MCP server reads/writes the local `.dev-kv.json` store (same as `npm run dev`). Create an account via the web UI first so tasks exist for your email.
+The local stdio server reads/writes `.dev-kv.json` (or Supabase if env vars are set). Create an account via the web UI first so tasks exist for your email.
 
 ### Gmail integration (scaffold)
 
@@ -179,7 +200,7 @@ Reminders run while you're logged in and recheck every 5 minutes.
 | Backend | EdgeOne Makers Cloud Functions |
 | AI | EdgeOne Makers Models — `@makers/deepseek-v4-flash` |
 | Storage | Supabase (auth sessions + task data) |
-| MCP | `@modelcontextprotocol/sdk` (stdio transport) |
+| MCP | `@modelcontextprotocol/sdk` (stdio + Streamable HTTP) |
 | Hosting | Tencent EdgeOne Pages |
 | Voice | Web Speech API |
 
@@ -212,7 +233,7 @@ MAKERS_MODELS_KEY=...   # optional — local parser works without it
 npm test
 ```
 
-E2E tests start a dev server on port 8099, then verify signup, chat/add task, categorization, persistence, and UI markup.
+E2E tests start a dev server on port 8099, then verify signup, chat/add task, categorization, persistence, UI markup, and authenticated MCP (`/api/mcp/token` + `/mcp` tools).
 
 ### Run MCP server
 
@@ -270,9 +291,14 @@ cloud-functions/api/
   me.js                         → GET  /api/me
   tasks.js                      → GET/POST /api/tasks
   chat.js                       → POST /api/chat (AI agent)
+  mcp-token.js                  → POST /api/mcp/token (MCP API token)
+  mcp.js                        → GET/POST /mcp (remote MCP)
+  _mcp-tools.js                 → shared MCP tool handlers
   gmail.js                      → Gmail OAuth + sync scaffold
 mcp-server/
   index.js                      → MCP server (stdio)
+cloud-functions/
+  mcp.js                        → EdgeOne /mcp route re-export
 docs/
   gmail-integration.md          → Gmail architecture + setup
 tests/

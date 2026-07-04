@@ -67,3 +67,39 @@ export function json(data, status = 200, extraHeaders = {}) {
     headers: { "Content-Type": "application/json", ...extraHeaders },
   });
 }
+
+export function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers":
+      "Content-Type, Authorization, mcp-session-id, Mcp-Session-Id, mcp-protocol-version, Mcp-Protocol-Version, Accept, Last-Event-ID",
+    "Access-Control-Expose-Headers": "mcp-session-id, Mcp-Session-Id, mcp-protocol-version, Mcp-Protocol-Version",
+  };
+}
+
+export function parseBearerToken(request) {
+  const header = request.headers.get("authorization") || "";
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : null;
+}
+
+// Returns the MCP-authenticated user's email, or null.
+export async function getMcpEmail(request, env) {
+  const token = parseBearerToken(request);
+  if (!token) return null;
+  const store = getStore(env);
+  const email = await store.get(`mcp_token:${token}`);
+  return email || null;
+}
+
+export async function getOrCreateMcpToken(env, email) {
+  const store = getStore(env);
+  const existing = await store.get(`user_mcp_token:${email}`);
+  if (existing) return existing;
+
+  const token = newSessionToken();
+  await store.put(`mcp_token:${token}`, email);
+  await store.put(`user_mcp_token:${email}`, token);
+  return token;
+}

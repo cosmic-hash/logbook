@@ -18,7 +18,7 @@ function loadEnvFile() {
     if (eq === -1) continue;
     const key = trimmed.slice(0, eq).trim();
     const val = trimmed.slice(eq + 1).trim();
-    if (!process.env[key]) process.env[key] = val;
+    if (process.env[key] === undefined) process.env[key] = val;
   }
 }
 
@@ -92,6 +92,7 @@ const routes = {
   "GET /api/tasks": "./cloud-functions/api/tasks.js",
   "POST /api/tasks": "./cloud-functions/api/tasks.js",
   "POST /api/chat": "./cloud-functions/api/chat.js",
+  "POST /api/mcp/token": "./cloud-functions/api/mcp-token.js",
 };
 
 const handlers = {};
@@ -111,6 +112,19 @@ createServer(async (req, res) => {
       const mod = handlers[routeKey];
       const handler =
         req.method === "GET" ? mod.onRequestGet : mod.onRequestPost;
+      const webRes = await handler({ request, env });
+      return sendWebResponse(res, webRes);
+    }
+
+    if (url.pathname === "/mcp") {
+      const body = await readBody(req);
+      const request = toWebRequest(req, body);
+      const mod = await import(pathToFileURL(join(__dirname, "./cloud-functions/api/mcp.js")).href);
+      if (req.method === "OPTIONS") {
+        const webRes = await mod.onRequestOptions({ request, env });
+        return sendWebResponse(res, webRes);
+      }
+      const handler = req.method === "GET" ? mod.onRequestGet : mod.onRequestPost;
       const webRes = await handler({ request, env });
       return sendWebResponse(res, webRes);
     }

@@ -39,6 +39,10 @@
   header h1{ font-family: Georgia, "Times New Roman", serif; font-size:28px; margin:0 0 4px 0; }
   header p{ margin:0; color:var(--ink-soft); font-size:14px; }
   .signout{ background:none; border:none; color:var(--ink-soft); font-size:12px; cursor:pointer; text-decoration:underline; }
+  .header-actions{ display:flex; gap:12px; align-items:center; }
+  .mcp-token-btn{ background:none; border:1px solid var(--card-border); color:var(--ink-soft); font-size:12px; cursor:pointer; padding:4px 8px; border-radius:4px; }
+  .mcp-token-panel{ display:none; margin-top:8px; padding:10px; background:var(--card); border:1px solid var(--card-border); border-radius:6px; font-size:12px; max-width:520px; }
+  .mcp-token-panel code{ display:block; word-break:break-all; margin:6px 0; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size:11px; }
   .section-label{ font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:var(--ink-soft); margin:24px 0 10px 0; }
   .empty{ color:var(--ink-soft); font-size:14px; font-style:italic; padding:8px 0; }
 
@@ -242,8 +246,16 @@
       <h1>Logbook</h1>
       <p>Paste anything, talk, or type — sticky notes keep track.</p>
     </div>
-    <button class="signout" id="signoutBtn">Sign out</button>
+    <div class="header-actions">
+      <button class="mcp-token-btn" id="mcpTokenBtn" title="Generate token for Cursor MCP">MCP token</button>
+      <button class="signout" id="signoutBtn">Sign out</button>
+    </div>
   </header>
+  <div class="mcp-token-panel" id="mcpTokenPanel">
+    <strong>MCP API token</strong> — use in Cursor remote MCP config with <code>Authorization: Bearer …</code>
+    <code id="mcpTokenValue"></code>
+    <button class="mcp-token-btn" id="mcpTokenCopyBtn">Copy token</button>
+  </div>
 
   <div class="reminder-banner" id="reminderBanner"></div>
 
@@ -410,7 +422,37 @@ document.getElementById('authSubmit').addEventListener('click', async () => {
 document.getElementById('signoutBtn').addEventListener('click', async () => {
   await fetch('/api/logout', { ...API, method: 'POST' });
   tasks = [];
+  document.getElementById('mcpTokenPanel').style.display = 'none';
   showAuth();
+});
+
+document.getElementById('mcpTokenBtn').addEventListener('click', async () => {
+  const panel = document.getElementById('mcpTokenPanel');
+  const valueEl = document.getElementById('mcpTokenValue');
+  try {
+    const res = await fetch('/api/mcp/token', { ...API, method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Could not get MCP token');
+      return;
+    }
+    valueEl.textContent = data.token;
+    panel.style.display = 'block';
+    showToast('MCP token ready — copy for Cursor config');
+  } catch (e) {
+    showToast('Could not reach the server');
+  }
+});
+
+document.getElementById('mcpTokenCopyBtn').addEventListener('click', async () => {
+  const token = document.getElementById('mcpTokenValue').textContent;
+  if (!token) return;
+  try {
+    await navigator.clipboard.writeText(token);
+    showToast('Token copied');
+  } catch (e) {
+    showToast('Copy failed — select token manually');
+  }
 });
 
 /* ---------- Tasks ---------- */

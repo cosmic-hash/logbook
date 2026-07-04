@@ -4,6 +4,8 @@
 import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { randomBytes } from "node:crypto";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 const PORT = process.env.TEST_PORT || 8099;
 const BASE = `http://localhost:${PORT}`;
@@ -12,6 +14,7 @@ const TEST_PASSWORD = "testpass1234";
 
 let serverProc = null;
 let cookie = "";
+let mcpToken = "";
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -49,7 +52,13 @@ function startServer() {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error("Server spawn timeout")), 10000);
     serverProc = spawn("node", ["dev-server.mjs"], {
-      env: { ...process.env, PORT: String(PORT) },
+      env: {
+        ...process.env,
+        PORT: String(PORT),
+        SUPABASE_URL: "",
+        SUPABASE_SERVICE_KEY: "",
+        SUPABASE_SECRET_KEY: "",
+      },
       stdio: ["ignore", "pipe", "pipe"],
     });
     serverProc.stdout.on("data", (d) => {
@@ -129,7 +138,73 @@ async function testIndexHtml() {
   const html = await res.text();
   assert(html.includes("board-scroll"), "should have horizontal board");
   assert(html.includes("sticky-note"), "should have sticky notes");
+  assert(html.includes("mcpTokenBtn"), "should have MCP token button");
   console.log("  ✓ index.html loads with new UI");
+}
+
+async function testMcpUnauthorized() {
+  const res = await fetch(`${BASE}/mcp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-03-26",
+        capabilities: {},
+        clientInfo: { name: "e2e", version: "1.0.0" },
+      },
+    }),
+  });
+  assert(res.status === 401, `unauthenticated MCP should return 401, got ${res.status}`);
+  console.log("  ✓ MCP rejects unauthenticated requests");
+}
+
+async function testMcpToken() {
+  const { res, body } = await fetchApi("/api/mcp/token", { method: "POST" });
+  assert(res.ok, `mcp token failed: ${JSON.stringify(body)}`);
+  assert(typeof body.token === "string" && body.token.length >= 32, "token should be returned");
+  assert(body.email === TEST_EMAIL, "token email mismatch");
+  mcpToken = body.token;
+
+  const again = await fetchApi("/api/mcp/token", { method: "POST" });
+  assert(again.body.token === mcpToken, "token should be stable for same user");
+  console.log("  ✓ MCP token generation");
+}
+
+async function testMcpTools() {
+  const transport = new StreamableHTTPClientTransport(new URL(`${BASE}/mcp`), {
+    requestInit: { headers: { Authorization: `Bearer ${mcpToken}` } },
+  });
+  const client = new Client({ name: "e2e", version: "1.0.0" });
+  await client.connect(transport);
+
+  const { tools } = await client.listTools();
+  const names = tools.map((t) => t.name);
+  assert(names.includes("list_tasks"), "should expose list_tasks");
+  assert(names.includes("add_task"), "should expose add_task");
+
+  const addResult = await client.callTool({
+    name: "add_task",
+    arguments: { message: "Book dentist appointment next Friday" },
+  });
+  const addText = addResult.content?.[0]?.text || "";
+  const addParsed = JSON.parse(addText);
+  assert(
+    addParsed.reply.includes("Added") || addParsed.tasks.length >= 3,
+    `add_task failed: ${addText}`
+  );
+
+  const listResult = await client.callTool({ name: "list_tasks", arguments: {} });
+  const listText = listResult.content?.[0]?.text || "";
+  const parsed = JSON.parse(listText);
+  assert(parsed.count >= 3, "list_tasks should return tasks");
+  const cleaning = parsed.tasks.find((t) => /dentist/i.test(t.title));
+  assert(cleaning, "MCP-added task should appear in list_tasks");
+
+  await transport.close();
+  console.log("  ✓ MCP list_tasks + add_task via /mcp");
 }
 
 async function run() {
@@ -143,6 +218,9 @@ async function run() {
     await testChatAddTask();
     await testSchoolCategory();
     await testPersistence();
+    await testMcpUnauthorized();
+    await testMcpToken();
+    await testMcpTools();
     console.log("\nAll tests passed.\n");
     process.exitCode = 0;
   } catch (err) {
