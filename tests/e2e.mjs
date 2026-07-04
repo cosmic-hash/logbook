@@ -143,6 +143,9 @@ async function testIndexHtml() {
   assert(html.includes("board-scroll"), "should have horizontal board");
   assert(html.includes("sticky-note"), "should have sticky notes");
   assert(html.includes("mcpTokenBtn"), "should have MCP token button");
+  assert(html.includes("retryMicAfterNetworkError"), "should have mic network retry logic");
+  assert(html.includes("MIC_NETWORK_RETRY_MAX"), "should have mic network retry config");
+  assert(html.includes("browser's cloud service"), "should have improved mic network error message");
   console.log("  ✓ index.html loads with new UI");
 }
 

@@ -1025,6 +1025,9 @@ let micBaseText = '';
 let micFinalTranscript = '';
 let micInterimTranscript = '';
 let micStatusTimer = null;
+let micNetworkRetryCount = 0;
+const MIC_NETWORK_RETRY_MAX = 1;
+const MIC_NETWORK_RETRY_DELAY = 500;
 const IS_SAFARI = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
 function setComposerStatus(msg, type){
@@ -1097,7 +1100,9 @@ function micErrorMessage(error){
     return 'Microphone blocked — allow access in browser settings';
   }
   if(error === 'audio-capture') return 'No microphone found. Check your device.';
-  if(error === 'network') return 'Voice needs internet connection';
+  if(error === 'network'){
+    return "Voice recognition uses your browser's cloud service — check WiFi and try Chrome or Safari";
+  }
   if(error === 'no-speech') return 'No speech detected — tap mic and try again.';
   return 'Microphone error — try again.';
 }
@@ -1133,14 +1138,42 @@ if(SpeechRecognition){
     micRecognitionActive = false;
   }
 
+  function handleMicFatalError(error){
+    clearMicRestartTimer();
+    micHadError = true;
+    micRecognitionActive = false;
+    micNetworkRetryCount = 0;
+    setMicRecording(false);
+    micManualStop = false;
+    micInterimTranscript = '';
+    syncMicToInput();
+    showMicStatus(micErrorMessage(error), 'error', 5000);
+  }
+
+  function retryMicAfterNetworkError(){
+    clearMicRestartTimer();
+    micRecognitionActive = false;
+    if(micNetworkRetryCount >= MIC_NETWORK_RETRY_MAX || micManualStop || !micIsRecording){
+      handleMicFatalError('network');
+      return;
+    }
+    micNetworkRetryCount++;
+    micRestartTimer = setTimeout(() => {
+      micRestartTimer = null;
+      if(micManualStop || !micIsRecording) return;
+      if(!safeRecognitionStart()){
+        handleMicFatalError('network');
+      }
+    }, MIC_NETWORK_RETRY_DELAY);
+  }
+
   function scheduleMicRestart(){
     clearMicRestartTimer();
     micRestartTimer = setTimeout(() => {
       micRestartTimer = null;
       if(micHadError || micManualStop || !micIsRecording) return;
       if(!safeRecognitionStart()){
-        finishMicRecording();
-        showMicStatus('Could not continue listening.', 'error', 5000);
+        handleMicFatalError('unknown');
       }
     }, 250);
   }
@@ -1148,6 +1181,7 @@ if(SpeechRecognition){
   function startMicRecognition(){
     if(micIsRecording || micRecognitionActive) return micIsRecording;
     micHadError = false;
+    micNetworkRetryCount = 0;
     applyMicContinuousMode();
     if(safeRecognitionStart()){
       setMicRecording(true);
@@ -1170,6 +1204,7 @@ if(SpeechRecognition){
   recognition.onstart = () => {
     micRecognitionActive = true;
     micHadError = false;
+    micNetworkRetryCount = 0;
   };
 
   recognition.onresult = (e) => {
@@ -1194,9 +1229,13 @@ if(SpeechRecognition){
   recognition.onerror = (e) => {
     if(e.error === 'aborted') return;
     if(e.error === 'no-speech' && micIsRecording && !micManualStop) return;
+    if(e.error === 'network'){
+      retryMicAfterNetworkError();
+      return;
+    }
     clearMicRestartTimer();
     micRecognitionActive = false;
-    const fatalErrors = ['not-allowed', 'service-not-allowed', 'network', 'audio-capture'];
+    const fatalErrors = ['not-allowed', 'service-not-allowed', 'audio-capture'];
     if(micUseContinuous && !fatalErrors.includes(e.error)){
       micUseContinuous = false;
       applyMicContinuousMode();
@@ -1205,12 +1244,7 @@ if(SpeechRecognition){
         return;
       }
     }
-    micHadError = true;
-    setMicRecording(false);
-    micManualStop = false;
-    micInterimTranscript = '';
-    syncMicToInput();
-    showMicStatus(micErrorMessage(e.error), 'error', 5000);
+    handleMicFatalError(e.error);
   };
 
   recognition.onend = () => {
@@ -1220,6 +1254,7 @@ if(SpeechRecognition){
       return;
     }
     if(micHadError || !micIsRecording) return;
+    if(micRestartTimer) return;
     if(!micUseContinuous){
       finishMicRecording();
       if(micFinalTranscript.trim()){
@@ -1238,6 +1273,7 @@ if(SpeechRecognition){
     }
     micManualStop = false;
     micHadError = false;
+    micNetworkRetryCount = 0;
     micBaseText = document.getElementById('input').value;
     micFinalTranscript = '';
     micInterimTranscript = '';
